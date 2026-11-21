@@ -20,6 +20,7 @@ input.f{width:100%;font:15px system-ui,sans-serif;padding:10px;border-radius:8px
 .t{font-weight:700;font-size:17px}.a,.p{color:var(--mu);font:14px system-ui,sans-serif}
 .d{font:13px/1.4 system-ui,sans-serif;margin-top:6px}.d i{color:var(--mu)}
 .l{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.cvs{display:flex;flex-direction:column;gap:6px;flex:none}
 #set{display:none;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-top:10px;font:14px system-ui,sans-serif}
 </style></head><body><main>
 <div class="top"><h1>📚 Kitappla</h1><button class="s" id="cfg">⚙️</button></div>
@@ -28,6 +29,7 @@ input.f{width:100%;font:15px system-ui,sans-serif;padding:10px;border-radius:8px
 <div class="row"><button id="gal">🖼️ Galeriden ekle</button><button id="cam">📷 Kamera</button></div>
 <div class="pk" id="alt" style="display:none">📷 Kamera (alternatif)<input type="file" id="fc" accept="image/*" capture="environment"></div>
 <div class="row"><button class="s" id="xl">📊 Excel</button><button class="s" id="pdf">📄 PDF</button><button class="s" id="fill">ℹ️ Bilgileri tamamla</button></div>
+<div class="pk" id="alt2" style="display:none">📷 Kapak fotoğrafı seç / çek (alternatif)<input type="file" id="fc2" accept="image/*"></div>
 <div id="st"></div>
 <input class="f" id="q" placeholder="Listede ara…">
 <div id="list"></div>
@@ -36,7 +38,8 @@ input.f{width:100%;font:15px system-ui,sans-serif;padding:10px;border-radius:8px
 <script>
 const $=id=>document.getElementById(id);
 let books=JSON.parse(localStorage.getItem("kitappla")||"[]");
-const save=()=>localStorage.setItem("kitappla",JSON.stringify(books));
+books.forEach(b=>{if(!b.id)b.id="b"+Math.random().toString(36).slice(2,9)});
+const save=()=>{try{localStorage.setItem("kitappla",JSON.stringify(books))}catch(e){$("st").textContent="Kayıt alanı doldu, son değişiklik kaydedilemedi."}};
 const P=n=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins[n];
 const esc=s=>{const d=document.createElement("div");d.textContent=s||"";return d.innerHTML};
 const hue=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return h};
@@ -45,14 +48,17 @@ function render(){
  const q=$("q").value.toLowerCase();
  $("list").innerHTML=books.filter(b=>(b.title+b.author+b.publisher).toLowerCase().includes(q)).map(b=>{
   const k=b.title+" "+b.author,h=hue(b.title);
-  const front=b.front?`<img class="cv" src="${esc(b.front)}" alt="">`:`<div class="cv" style="background:hsl(${h},45%,38%)">${esc(b.title)}</div>`;
+  const fr=b.fimg||b.front;
+  const front=fr?`<img class="cv" src="${esc(fr)}" alt="">`:`<div class="cv" style="background:hsl(${h},45%,38%)">${esc(b.title)}</div>`;
+  const back=b.bimg?`<img class="cv" src="${esc(b.bimg)}" alt="">`:"";
   const d=b.desc?`<div class="d">${esc(b.desc)}<br><i>Kaynak: ${esc(b.descSrc)}</i></div>`:"";
-  return `<div class="book">${front}<div><div class="t">${esc(b.title)}</div>
+  return `<div class="book"><div class="cvs">${front}${back}</div><div><div class="t">${esc(b.title)}</div>
   <div class="a">✍️ ${esc(b.author)||"—"}</div><div class="p">🏛️ ${esc(b.publisher)||"—"}${b.guess&&b.publisher?" (tahmini)":""}</div>${d}
-  <div class="l"><a class="s" target="_blank" href="${gi(k+" kitap kapağı")}">Ön kapak</a><a class="s" target="_blank" href="${gi(k+" arka kapak")}">Arka kapak</a>
-  <a class="s" target="_blank" href="https://www.kitapyurdu.com/index.php?route=product/search&filter_name=${encodeURIComponent(k)}">Kitapyurdu</a></div></div></div>`}).join("");
+  <div class="l"><button class="s" data-id="${b.id}" data-side="f">📷 Ön kapak</button><button class="s" data-id="${b.id}" data-side="b">📷 Arka kapak</button></div>
+  <div class="l"><a class="s" target="_blank" href="${gi(k+" kitap kapağı")}">Kapak ara</a>
+  <a class="s" target="_blank" href="https://www.amazon.com.tr/s?k=${encodeURIComponent(k)}">Amazon.com.tr</a></div></div></div>`}).join("");
 }
-function shrink(src){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const s=Math.min(1,1600/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",.85).split(",")[1])};i.onerror=no;i.src=src})}
+function shrink(src,max=1600,q=.85){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const s=Math.min(1,max/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",q).split(",")[1])};i.onerror=no;i.src=src})}
 const toDataUrl=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
 const PROMPT='Bu fotoğrafta kitap sırtları var. Okunabilen her kitabı bul. Yalnızca JSON dizisi döndür: [{"title":"","author":"","publisher":"","guess":false}]. Sırtta yazanı aynen kullan. Yayınevi sırtta yoksa ve kitabı kesin tanıyorsan Türkiye baskısının yayınevini yaz, guess:true yap; emin değilsen boş bırak.';
 const GM=["gemini-3.5-flash","gemini-2.5-flash"];
@@ -92,7 +98,7 @@ async function process(urls){
    const list=await read(await shrink(u));
    for(const x of list){
     if(!x.title||books.some(y=>y.title.toLowerCase()===x.title.toLowerCase()))continue;
-    const b={title:x.title,author:x.author||"",publisher:x.publisher||"",guess:!!x.guess};
+    const b={id:"b"+Math.random().toString(36).slice(2,9),title:x.title,author:x.author||"",publisher:x.publisher||"",guess:!!x.guess};
     books.push(b);n++;save();render();
     enrich(b).then(()=>{save();render()});
    }
@@ -122,6 +128,28 @@ $("cam").onclick=async()=>{
 };
 $("fc").onchange=async e=>{$("alt").style.display="none";process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
 $("fb").onchange=async e=>{process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
+let pending=null;
+async function setCover(id,side,url){
+ const b=books.find(x=>x.id===id);if(!b)return;
+ b[side==="f"?"fimg":"bimg"]="data:image/jpeg;base64,"+await shrink(url,360,.75);save();render();
+}
+async function coverPhoto(id,side){
+ pending={id,side};const C=P("Camera");
+ if(C){
+  try{
+   try{await C.requestPermissions({permissions:["camera"]})}catch(e){}
+   const p=await C.getPhoto({source:"PROMPT",resultType:"dataUrl",quality:80,promptLabelHeader:"Kapak fotoğrafı",promptLabelPhoto:"Galeriden seç",promptLabelPicture:"Fotoğraf çek"});
+   return setCover(id,side,p.dataUrl);
+  }catch(e){
+   const m=String((e&&e.message)||e);
+   if(/cancel|iptal/i.test(m))return;
+   $("st").textContent="Kamera açılamadı ("+m+"). Alternatif butonu dene.";
+  }
+ }
+ $("alt2").style.display="block";
+}
+$("list").onclick=e=>{const t=e.target.closest("button[data-id]");if(t)coverPhoto(t.dataset.id,t.dataset.side)};
+$("fc2").onchange=async e=>{const f=e.target.files[0];e.target.value="";$("alt2").style.display="none";if(f&&pending)setCover(pending.id,pending.side,await toDataUrl(URL.createObjectURL(f)))};
 $("fill").onclick=async()=>{
  const todo=books.filter(b=>!b.desc||!b.front);let i=0;
  for(const b of todo){i++;$("st").textContent=`Bilgiler tamamlanıyor ${i}/${todo.length}…`;await enrich(b);save();render()}
