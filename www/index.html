@@ -10,20 +10,26 @@ main{max-width:640px;margin:0 auto;padding:16px}
 .top{display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:30px;color:var(--ac)}
 button{font:600 15px system-ui,sans-serif;background:var(--ac);color:#fff;border:0;border-radius:10px;padding:13px 16px}
 button.s,a.s{background:none;color:var(--ac);border:1px solid var(--ac);padding:7px 10px;font:13px system-ui,sans-serif;border-radius:10px;text-decoration:none;display:inline-block}
-.row{display:flex;gap:8px;margin:14px 0}.row button{flex:1}
+.row{display:flex;gap:8px;margin:12px 0}.row button{flex:1}
+.pk{position:relative;overflow:hidden;background:var(--ac);color:#fff;border-radius:10px;padding:13px 16px;font:600 15px system-ui,sans-serif;text-align:center;margin-bottom:10px}
+.pk input{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:0}
 #st{font:14px system-ui,sans-serif;color:var(--mu);margin:6px 0 10px}
-input{width:100%;font:15px system-ui,sans-serif;padding:10px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);margin-bottom:10px}
+input.f{width:100%;font:15px system-ui,sans-serif;padding:10px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);margin-bottom:10px}
 .book{display:flex;gap:12px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
 .cv{width:60px;height:88px;border-radius:4px;flex:none;color:#fff;font:10px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;object-fit:cover}
-.t{font-weight:700;font-size:17px}.a,.p{color:var(--mu);font:14px system-ui,sans-serif}.l{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.t{font-weight:700;font-size:17px}.a,.p{color:var(--mu);font:14px system-ui,sans-serif}
+.d{font:13px/1.4 system-ui,sans-serif;margin-top:6px}.d i{color:var(--mu)}
+.l{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
 #set{display:none;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-top:10px;font:14px system-ui,sans-serif}
 </style></head><body><main>
 <div class="top"><h1>📚 Kitappla</h1><button class="s" id="cfg">⚙️</button></div>
 <div id="set">Gemini API anahtarı (yalnızca bu telefonda saklanır):
-<input id="key" type="password" placeholder="AIza..."><button id="ksave">Kaydet</button></div>
+<input class="f" id="key" type="password" placeholder="AIza..."><button id="ksave">Kaydet</button></div>
 <div class="row"><button id="gal">🖼️ Galeriden ekle</button><button id="cam">📷 Kamera</button></div>
+<div class="pk" id="alt" style="display:none">📷 Kamera (alternatif)<input type="file" id="fc" accept="image/*" capture="environment"></div>
+<div class="row"><button class="s" id="xl">📊 Excel</button><button class="s" id="pdf">📄 PDF</button><button class="s" id="fill">ℹ️ Bilgileri tamamla</button></div>
 <div id="st"></div>
-<input id="q" placeholder="Listede ara…">
+<input class="f" id="q" placeholder="Listede ara…">
 <div id="list"></div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
@@ -31,7 +37,7 @@ input{width:100%;font:15px system-ui,sans-serif;padding:10px;border-radius:8px;b
 const $=id=>document.getElementById(id);
 let books=JSON.parse(localStorage.getItem("kitappla")||"[]");
 const save=()=>localStorage.setItem("kitappla",JSON.stringify(books));
-const Cam=()=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.Camera;
+const P=n=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins[n];
 const esc=s=>{const d=document.createElement("div");d.textContent=s||"";return d.innerHTML};
 const hue=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return h};
 const gi=q=>"https://www.google.com/search?tbm=isch&q="+encodeURIComponent(q);
@@ -40,36 +46,43 @@ function render(){
  $("list").innerHTML=books.filter(b=>(b.title+b.author+b.publisher).toLowerCase().includes(q)).map(b=>{
   const k=b.title+" "+b.author,h=hue(b.title);
   const front=b.front?`<img class="cv" src="${esc(b.front)}" alt="">`:`<div class="cv" style="background:hsl(${h},45%,38%)">${esc(b.title)}</div>`;
+  const d=b.desc?`<div class="d">${esc(b.desc)}<br><i>Kaynak: ${esc(b.descSrc)}</i></div>`:"";
   return `<div class="book">${front}<div><div class="t">${esc(b.title)}</div>
-  <div class="a">✍️ ${esc(b.author)||"—"}</div><div class="p">🏛️ ${esc(b.publisher)||"—"}${b.guess&&b.publisher?" (tahmini)":""}</div>
-  <div class="l"><a class="s" target="_blank" href="${gi(k+" kitap kapağı")}">Ön kapak</a><a class="s" target="_blank" href="${gi(k+" arka kapak")}">Arka kapak</a></div></div></div>`}).join("");
+  <div class="a">✍️ ${esc(b.author)||"—"}</div><div class="p">🏛️ ${esc(b.publisher)||"—"}${b.guess&&b.publisher?" (tahmini)":""}</div>${d}
+  <div class="l"><a class="s" target="_blank" href="${gi(k+" kitap kapağı")}">Ön kapak</a><a class="s" target="_blank" href="${gi(k+" arka kapak")}">Arka kapak</a>
+  <a class="s" target="_blank" href="https://www.kitapyurdu.com/index.php?route=product/search&filter_name=${encodeURIComponent(k)}">Kitapyurdu</a></div></div></div>`}).join("");
 }
 function shrink(src){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const s=Math.min(1,1600/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",.85).split(",")[1])};i.onerror=no;i.src=src})}
 const toDataUrl=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
 const PROMPT='Bu fotoğrafta kitap sırtları var. Okunabilen her kitabı bul. Yalnızca JSON dizisi döndür: [{"title":"","author":"","publisher":"","guess":false}]. Sırtta yazanı aynen kullan. Yayınevi sırtta yoksa ve kitabı kesin tanıyorsan Türkiye baskısının yayınevini yaz, guess:true yap; emin değilsen boş bırak.';
-const MODELS=["gemini-3.5-flash","gemini-2.5-flash"];
-async function read(b64){
+const GM=["gemini-3.5-flash","gemini-2.5-flash"];
+async function gem(parts,json){
  const key=localStorage.getItem("kitappla_key");if(!key)throw new Error("Önce ⚙️ ile API anahtarını gir.");
  let last="";
- for(const m of MODELS){
-  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"content-type":"application/json"},
-  body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}]}],generationConfig:{responseMimeType:"application/json"}})});
+ for(const m of GM){
+  const body={contents:[{parts}]};if(json)body.generationConfig={responseMimeType:"application/json"};
+  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
   const j=await r.json();
   if(r.status===404){last=(j.error&&j.error.message)||"model yok";continue}
   if(!r.ok)throw new Error((j.error&&j.error.message)||r.status);
-  const t=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||"").join("");
-  return JSON.parse(t.replace(/```json|```/g,"").trim());
+  return ((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||"").join("");
  }
  throw new Error(last);
 }
-async function cover(b){
- try{const q=encodeURIComponent("intitle:"+b.title+(b.author?" inauthor:"+b.author:""));
-  const j=await (await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=1&q="+q)).json();
-  const v=j.items&&j.items[0]&&j.items[0].volumeInfo;
-  if(v){const im=v.imageLinks;if(im)b.front=(im.thumbnail||im.smallThumbnail).replace("http://","https://");
-   if(!b.publisher&&v.publisher){b.publisher=v.publisher;b.guess=true}}}catch(e){}
+const read=async b64=>JSON.parse((await gem([{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}],true)).replace(/```json|```/g,"").trim());
+async function enrich(b){
+ if(!b.front||!b.desc){
+  try{const q=encodeURIComponent("intitle:"+b.title+(b.author?" inauthor:"+b.author:""));
+   const j=await (await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=1&q="+q)).json();
+   const v=j.items&&j.items[0]&&j.items[0].volumeInfo;
+   if(v){const im=v.imageLinks;if(im&&!b.front)b.front=(im.thumbnail||im.smallThumbnail).replace("http://","https://");
+    if(!b.publisher&&v.publisher){b.publisher=v.publisher;b.guess=true}
+    if(!b.desc&&v.description){b.desc=v.description.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,380);b.descSrc="Google Books"}}}catch(e){}
+ }
  if(!b.front){try{const j=await (await fetch("https://openlibrary.org/search.json?limit=1&fields=cover_i&title="+encodeURIComponent(b.title)+"&author="+encodeURIComponent(b.author||""))).json();
   const c=j.docs&&j.docs[0]&&j.docs[0].cover_i;if(c)b.front="https://covers.openlibrary.org/b/id/"+c+"-M.jpg"}catch(e){}}
+ if(!b.desc){try{const t=await gem([{text:'"'+b.title+'" ('+(b.author||"yazar bilinmiyor")+') kitabı için Türkçe, en fazla 2 cümlelik, tarafsız kısa bir içerik özeti yaz. Kitabı tanımıyorsan ayrıntı uydurma, sadece "Bu kitap hakkında bilgi bulunamadı." yaz. Sadece özeti yaz.'}],false);
+  if(t.trim()&&!/bilgi bulunamadı/i.test(t)){b.desc=t.trim().slice(0,380);b.descSrc="yapay zekâ özeti"}}catch(e){}}
 }
 async function process(urls){
  let n=0;
@@ -81,22 +94,96 @@ async function process(urls){
     if(!x.title||books.some(y=>y.title.toLowerCase()===x.title.toLowerCase()))continue;
     const b={title:x.title,author:x.author||"",publisher:x.publisher||"",guess:!!x.guess};
     books.push(b);n++;save();render();
-    cover(b).then(()=>{save();render()});
+    enrich(b).then(()=>{save();render()});
    }
   }catch(e){$("st").textContent="Hata: "+e.message;return}
  }
  $("st").textContent=`${n} yeni kitap eklendi. Toplam: ${books.length}`;
 }
 $("gal").onclick=async()=>{
- const C=Cam();if(!C)return $("fb").click();
+ const C=P("Camera");if(!C)return $("fb").click();
  try{const r=await C.pickImages({quality:85,limit:10});
   process(await Promise.all(r.photos.map(p=>toDataUrl(p.webPath))))}catch(e){}
 };
 $("cam").onclick=async()=>{
- const C=Cam();if(!C)return $("fb").click();
- try{const p=await C.getPhoto({source:"CAMERA",resultType:"dataUrl",quality:85});process([p.dataUrl])}catch(e){}
+ const C=P("Camera");
+ if(C){
+  try{
+   try{await C.requestPermissions({permissions:["camera"]})}catch(e){}
+   const p=await C.getPhoto({source:"CAMERA",resultType:"dataUrl",quality:85});
+   return process([p.dataUrl]);
+  }catch(e){
+   const m=String((e&&e.message)||e);
+   if(/cancel|iptal/i.test(m))return;
+   $("st").textContent="Kamera eklentisi açılamadı ("+m+"). Aşağıdaki alternatif kamera butonunu dene.";
+  }
+ }
+ $("alt").style.display="block";
 };
+$("fc").onchange=async e=>{$("alt").style.display="none";process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
 $("fb").onchange=async e=>{process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
+$("fill").onclick=async()=>{
+ const todo=books.filter(b=>!b.desc||!b.front);let i=0;
+ for(const b of todo){i++;$("st").textContent=`Bilgiler tamamlanıyor ${i}/${todo.length}…`;await enrich(b);save();render()}
+ $("st").textContent="Bilgiler tamamlandı.";
+};
+async function shareFile(name,b64){
+ const F=P("Filesystem"),S=P("Share");
+ if(!F||!S)throw new Error("Paylaşma eklentisi yok (uygulamayı güncelle).");
+ const r=await F.writeFile({path:name,data:b64,directory:"CACHE"});
+ await S.share({title:name,url:r.uri,dialogTitle:"Kaydet veya paylaş"});
+}
+function loadXlsx(){return new Promise((ok,no)=>{if(window.XLSX)return ok();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";s.onload=ok;s.onerror=()=>no(new Error("Excel kütüphanesi yüklenemedi (internet?)"));document.head.appendChild(s)})}
+$("xl").onclick=async()=>{
+ if(!books.length)return $("st").textContent="Liste boş.";
+ try{await loadXlsx();
+  const rows=[["Kitap","Yazar","Yayınevi","Kısa bilgi","Bilgi kaynağı"],...books.map(b=>[b.title,b.author,b.publisher,b.desc||"",b.descSrc||""])];
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:36},{wch:24},{wch:22},{wch:80},{wch:18}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Kitaplık");
+  await shareFile("kitappla.xlsx",XLSX.write(wb,{bookType:"xlsx",type:"base64"}));
+ }catch(e){$("st").textContent="Excel hatası: "+((e&&e.message)||e)}
+};
+function pdfPages(){
+ const W=1240,H=1754,M=80,pages=[];let c,x,y;
+ const np=()=>{c=document.createElement("canvas");c.width=W;c.height=H;x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,W,H);y=M;pages.push(c)};
+ const wrap=(t,f,w)=>{x.font=f;const out=[];let line="";for(const word of String(t||"").split(/\s+/)){const tt=line?line+" "+word:word;if(x.measureText(tt).width>w&&line){out.push(line);line=word}else line=tt}if(line)out.push(line);return out};
+ const draw=(ls,f,col,lh)=>{x.font=f;x.fillStyle=col;ls.forEach(l=>{y+=lh;x.fillText(l,M,y)})};
+ np();x.fillStyle="#b5472b";x.font="bold 54px sans-serif";x.fillText("Kitaplığım",M,y+40);y+=100;
+ books.forEach((b,i)=>{
+  const fw=W-2*M,tl=wrap((i+1)+". "+b.title,"bold 34px sans-serif",fw);
+  const al=wrap([b.author,b.publisher].filter(Boolean).join(" · "),"28px sans-serif",fw);
+  const dl=wrap(b.desc,"26px sans-serif",fw);
+  if(y+tl.length*44+al.length*38+dl.length*34+50>H-M)np();
+  draw(tl,"bold 34px sans-serif","#000",44);draw(al,"28px sans-serif","#555",38);draw(dl,"26px sans-serif","#222",34);y+=50;
+ });
+ return pages.map(p=>p.toDataURL("image/jpeg",.9).split(",")[1]);
+}
+function makePdf(jpgs){
+ const enc=new TextEncoder(),parts=[],offs=[];let len=0;
+ const add=d=>{const u=typeof d==="string"?enc.encode(d):d;parts.push(u);len+=u.length};
+ const obj=(n,fn)=>{offs[n]=len;add(n+" 0 obj\n");fn();add("\nendobj\n")};
+ const N=jpgs.length;add("%PDF-1.4\n");
+ obj(1,()=>add("<< /Type /Catalog /Pages 2 0 R >>"));
+ obj(2,()=>add("<< /Type /Pages /Count "+N+" /Kids ["+jpgs.map((_,i)=>(3+3*i)+" 0 R").join(" ")+"] >>"));
+ jpgs.forEach((j,i)=>{
+  const bin=Uint8Array.from(atob(j),ch=>ch.charCodeAt(0)),cs="q 595 0 0 842 0 0 cm /Im0 Do Q";
+  obj(3+3*i,()=>add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 "+(5+3*i)+" 0 R >> >> /Contents "+(4+3*i)+" 0 R >>"));
+  obj(4+3*i,()=>add("<< /Length "+cs.length+" >>\nstream\n"+cs+"\nendstream"));
+  obj(5+3*i,()=>{add("<< /Type /XObject /Subtype /Image /Width 1240 /Height 1754 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+bin.length+" >>\nstream\n");add(bin);add("\nendstream")});
+ });
+ const xr=len,total=3+3*N;
+ add("xref\n0 "+total+"\n0000000000 65535 f \n");
+ for(let n=1;n<total;n++)add(String(offs[n]).padStart(10,"0")+" 00000 n \n");
+ add("trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xr+"\n%%EOF");
+ const all=new Uint8Array(len);let p=0;for(const u of parts){all.set(u,p);p+=u.length}
+ let s="";for(let i=0;i<all.length;i+=0x8000)s+=String.fromCharCode.apply(null,all.subarray(i,i+0x8000));
+ return btoa(s);
+}
+$("pdf").onclick=async()=>{
+ if(!books.length)return $("st").textContent="Liste boş.";
+ try{$("st").textContent="PDF hazırlanıyor…";await shareFile("kitappla.pdf",makePdf(pdfPages()));$("st").textContent=""}
+ catch(e){$("st").textContent="PDF hatası: "+((e&&e.message)||e)}
+};
 $("cfg").onclick=()=>{const s=$("set");s.style.display=s.style.display==="block"?"none":"block";$("key").value=localStorage.getItem("kitappla_key")||""};
 $("ksave").onclick=()=>{localStorage.setItem("kitappla_key",$("key").value.trim());$("set").style.display="none";$("st").textContent="Anahtar kaydedildi."};
 $("q").oninput=render;
