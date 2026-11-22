@@ -79,7 +79,7 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 8</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 9</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <script>
@@ -101,14 +101,15 @@ $("ttest").onclick=async()=>{
  let list;try{list=await models()}catch(e){list=GM}
  log("Denenecek modeller: "+list.join(", "));
  const c=document.createElement("canvas");c.width=240;c.height=90;const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,240,90);x.fillStyle="#000";x.font="bold 44px sans-serif";x.fillText("KITAP",20,62);
- const img=c.toDataURL("image/jpeg",.9).split(",")[1];let okm="";
+ const parts=[{inline_data:{mime_type:"image/jpeg",data:c.toDataURL("image/jpeg",.9).split(",")[1]}},{text:"Resimde ne yazıyor? Tek kelime yaz."}];
+ let okm="";
  for(const m of list){
   const t0=Date.now();
   try{
-   const r=await genReq(m,{contents:[{parts:[{inline_data:{mime_type:"image/jpeg",data:img}},{text:"Resimde ne yazıyor? Tek kelime yaz."}]}]},30000);
-   const j=await r.json().catch(()=>({})),sn=((Date.now()-t0)/1000).toFixed(1);
-   if(r.ok){const p=(((j.candidates||[])[0]||{}).content||{}).parts;log("✓ "+m+" · "+sn+" sn · yanıt: "+((p&&p[0]&&p[0].text)||"").trim().slice(0,30));if(!okm){okm=m;localStorage.setItem(GOOD,m)}}
-   else log("✗ "+m+" · HTTP "+r.status+" · "+((j.error&&j.error.message)||"").slice(0,120));
+   const {r,j}=await callModel(m,parts,false,30000),sn=((Date.now()-t0)/1000).toFixed(1);
+   if(!r)log("✗ "+m+" · "+sn+" sn · yanıt gelmedi");
+   else if(r.ok){const p=(((j.candidates||[])[0]||{}).content||{}).parts;log("✓ "+m+" · "+sn+" sn · yanıt: "+((p&&p[0]&&p[0].text)||"").trim().slice(0,30));okm=m;localStorage.setItem(GOOD,m);break}
+   else log("✗ "+m+" · HTTP "+r.status+" · "+((j.error&&j.error.message)||"").slice(0,90));
   }catch(e){log("✗ "+m+" · "+e.message)}
  }
  log(okm?"Çalışan model seçildi: "+okm:"Hiçbir model çalışmadı. Bu satırları bana gönder.");
@@ -147,6 +148,17 @@ const PROMPT='Bu fotoğrafta kitap sırtları var. Okunabilen her kitabı bul. Y
 const GM=["gemini-3.8-flash","gemini-3.5-flash"];
 const tfetch=(u,o={},ms=60000)=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);return fetch(u,{...o,signal:c.signal}).catch(e=>{throw e&&e.name==="AbortError"?new Error("Zaman aşımı, internet bağlantısını kontrol et."):e}).finally(()=>clearTimeout(t))};
 const GOOD="kitappla_good";
+const mkBody=(parts,json,tk)=>{const g={};if(tk)g.thinkingConfig={thinkingLevel:"low"};if(json)g.responseMimeType="application/json";return{contents:[{parts}],generationConfig:g}};
+async function callModel(m,parts,json,ms){
+ let r=null,j={},tk=true;
+ for(let a=0;a<2;a++){
+  try{r=await genReq(m,mkBody(parts,json,tk),ms)}catch(e){if(/Zaman/.test(e.message))return{r:null,j};throw e}
+  j=await r.json().catch(()=>({}));
+  if(r.status===400&&tk){tk=false;continue}
+  break;
+ }
+ return{r,j};
+}
 const genReq=(m,body,ms)=>{const px=proxy(),key=localStorage.getItem("kitappla_key");return tfetch(px?px+"/generate/"+m:"https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:px?hdrs():{"content-type":"application/json"},body:JSON.stringify(body)},ms)};
 async function modelOrder(){const l=await models(),g=localStorage.getItem(GOOD);return g?[g,...l.filter(x=>x!==g)]:l}
 async function models(){
@@ -154,8 +166,8 @@ async function models(){
  try{
   const r=proxy()?await tfetch(proxy()+"/models",{headers:hdrs()},15000):await tfetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(localStorage.getItem("kitappla_key")||""),{},15000);
   const j=await r.json();
-  const l=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")&&/^models\/gemini-[\d.]+-flash/.test(m.name)&&!/lite|image|tts|live|audio|embed|exp|vision|thinking/.test(m.name))
-   .map(m=>({n:m.name.replace("models/",""),v:parseFloat(m.name.match(/gemini-([\d.]+)-flash/)[1])})).sort((a,b)=>b.v-a.v||a.n.length-b.n.length).slice(0,4).map(x=>x.n);
+  const l=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")&&/^models\/gemini-[\d.]+-flash/.test(m.name)&&!/image|tts|live|audio|embed|exp|vision|thinking/.test(m.name))
+   .map(m=>({n:m.name.replace("models/",""),v:parseFloat(m.name.match(/gemini-([\d.]+)-flash/)[1])})).sort((a,b)=>(/lite/.test(a.n)-/lite/.test(b.n))||b.v-a.v||a.n.length-b.n.length).slice(0,5).map(x=>x.n);
   if(l.length){localStorage.setItem("kitappla_models",JSON.stringify({t:Date.now(),l}));return l}
  }catch(e){}
  return GM;
@@ -166,17 +178,15 @@ async function gem(parts,json){
  if(!hasAccess())throw new Error("Önce sağ üstteki ayarlardan API anahtarını gir.");
  let last="",code=0;
  for(const m of await modelOrder()){
-  const body={contents:[{parts}]};if(json)body.generationConfig={responseMimeType:"application/json"};
-  let r;
-  try{r=await genReq(m,body,45000)}catch(e){if(/Zaman/.test(e.message)){last=m+": yanıt gelmedi (45 sn)";if(localStorage.getItem(GOOD)===m)localStorage.removeItem(GOOD);continue}throw e}
-  const j=await r.json().catch(()=>({}));
+  const {r,j}=await callModel(m,parts,json,45000);
+  if(!r){last=m+": yanıt gelmedi (45 sn)";if(localStorage.getItem(GOOD)===m)localStorage.removeItem(GOOD);continue}
   if([404,429,503].includes(r.status)){last=(j.error&&j.error.message)||("HTTP "+r.status);code=r.status;if(r.status===404&&localStorage.getItem(GOOD)===m)localStorage.removeItem(GOOD);continue}
   if(!r.ok)throw new Error((j.error&&j.error.message)||r.status);
   lastModel=m;localStorage.setItem(GOOD,m);
   return ((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||"").join("");
  }
  if(code===404)localStorage.removeItem("kitappla_models");
- const e=new Error(code===429?(/Günlük/.test(last)?last:"Gemini istek sınırı doldu, biraz bekleyip tekrar dene."):(last||"Gemini yanıt vermedi"));e.code=code;throw e;
+ const e=new Error(code===429?(/Günlük/.test(last)?last:"Gemini kotası dolmuş görünüyor. Birkaç dakika bekleyip tekrar dene; sürerse Google AI Studio'dan kotayı kontrol et."):(last||"Gemini yanıt vermedi"));e.code=code;throw e;
 }
 async function gemRetry(parts,json){
  for(let i=0;;i++){try{return await gem(parts,json)}catch(e){if(i>=2||(e.code!==429&&e.code!==503)||/Günlük/.test(e.message))throw e;$("st").textContent="Gemini yoğun, "+8*(i+1)+" sn bekleniyor…";await sleep(8000*(i+1))}}
