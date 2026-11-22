@@ -45,6 +45,10 @@ button{font:inherit;cursor:pointer;border:0}
 .mini{display:inline-flex;align-items:center;gap:5px;padding:7px 11px;border-radius:10px;background:color-mix(in srgb,var(--ac) 10%,transparent);color:var(--ac);font-size:12.5px;font-weight:600;text-decoration:none}
 .mini .ic{width:14px;height:14px}.mini.ghost{background:transparent;border:1px solid var(--bd);color:var(--mu)}
 .rev{margin-top:12px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--ac) 7%,transparent)}.rh{font-size:12px;font-weight:700;color:var(--ac);margin-bottom:4px}.rt{font-size:13px;white-space:pre-line}.rev a{font-size:12px;color:var(--ac);font-weight:600;display:inline-block;margin-top:6px}
+.book{position:relative}.t{padding-right:34px}
+.tabs{display:flex;gap:6px;padding:4px;border-radius:999px;background:color-mix(in srgb,var(--mu) 14%,transparent);margin:12px 0 4px}
+.tab{flex:1;padding:9px 12px;border-radius:999px;background:transparent;color:var(--mu);font-weight:700;font-size:14px}.tab.on{background:var(--sf);color:var(--tx);box-shadow:var(--sh)}
+.heart{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:50%;background:transparent;color:var(--mu);display:grid;place-items:center;padding:0}.heart .ic{width:22px;height:22px}.heart.on{color:#e11d48}.heart.on .ic{fill:currentColor}
 .empty{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:56px 24px;color:var(--mu)}.empty b{color:var(--tx);font-size:17px}.eb{font-size:46px}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute"><defs>
@@ -54,10 +58,11 @@ button{font:inherit;cursor:pointer;border:0}
 <symbol id="i-q" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></symbol>
 <symbol id="i-dl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
 <symbol id="i-re" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></symbol>
 </defs></svg>
 <div class="bar"><h1>kitap<span>pla</span></h1><button class="icon" id="cfg" aria-label="Ayarlar"><svg class="ic"><use href="#i-set"/></svg></button></div>
 <main>
-<div id="set"><b>Gemini API anahtarı</b><input class="f" id="key" type="password" placeholder="AIza..."><button id="ksave">Kaydet</button><div style="margin-top:8px;color:var(--mu);font-size:12.5px">Yalnızca bu telefonda saklanır.</div></div>
+<div id="set"><b>Gemini API anahtarı</b><input class="f" id="key" type="password" placeholder="AIza..."><b style="margin-top:12px">Sunucu adresi (isteğe bağlı)</b><input class="f" id="purl" type="url" placeholder="https://kitappla.xxx.workers.dev"><button id="ksave">Kaydet</button><div style="margin-top:8px;color:var(--mu);font-size:12.5px">Sunucu adresi girilirse anahtar gerekmez. Bilgiler yalnızca bu telefonda saklanır.</div></div>
 <div class="tiles">
 <button class="tile" id="gal"><svg class="ic"><use href="#i-img"/></svg><span>Galeriden ekle<small>Sırt fotoğrafı seç</small></span></button>
 <button class="tile" id="cam"><svg class="ic"><use href="#i-cam"/></svg><span>Kamera<small>Fotoğraf çek</small></span></button>
@@ -71,18 +76,24 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="pk" id="alt2" style="display:none">Kapak fotoğrafı seç / çek (alternatif)<input type="file" id="fc2" accept="image/*"></div>
 <div id="st"></div>
 <div class="search"><svg class="ic"><use href="#i-q"/></svg><input class="f" id="q" placeholder="Kitap, yazar veya yayınevi ara"></div>
+<div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 6</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 7</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <script>
 
 const $=id=>document.getElementById(id);
+const PROXY="",TOKEN="";
+const proxy=()=>(localStorage.getItem("kitappla_proxy")||PROXY).replace(/\/+$/,"");
+const hdrs=()=>TOKEN?{"content-type":"application/json","x-app-token":TOKEN}:{"content-type":"application/json"};
+const hasAccess=()=>!!(proxy()||localStorage.getItem("kitappla_key"));
+let tab="all",lastModel="";
 window.onerror=(m,u,l)=>{const s=$("st");if(s)s.textContent="Hata: "+m+(l?" (satır "+l+")":"")};
-$("cfg").onclick=()=>{const s=$("set");s.style.display=s.style.display==="block"?"none":"block";$("key").value=localStorage.getItem("kitappla_key")||""};
-$("ksave").onclick=()=>{localStorage.setItem("kitappla_key",$("key").value.trim());$("set").style.display="none";$("st").textContent="Anahtar kaydedildi."};
-if(!localStorage.getItem("kitappla_key"))$("set").style.display="block";
+$("cfg").onclick=()=>{const s=$("set");s.style.display=s.style.display==="block"?"none":"block";$("key").value=localStorage.getItem("kitappla_key")||"";$("purl").value=localStorage.getItem("kitappla_proxy")||""};
+$("ksave").onclick=()=>{localStorage.setItem("kitappla_key",$("key").value.trim());localStorage.setItem("kitappla_proxy",$("purl").value.trim());localStorage.removeItem("kitappla_models");$("set").style.display="none";$("st").textContent="Ayarlar kaydedildi."};
+if(!hasAccess())$("set").style.display="block";
 let books=[];try{books=JSON.parse(localStorage.getItem("kitappla")||"[]")}catch(e){}
 books.forEach(b=>{if(!b.id)b.id="b"+Math.random().toString(36).slice(2,9)});
 const save=()=>{try{localStorage.setItem("kitappla",JSON.stringify(books))}catch(e){$("st").textContent="Kayıt alanı doldu, son değişiklik kaydedilemedi."}};
@@ -92,8 +103,12 @@ const hue=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return h};
 const gi=q=>"https://www.google.com/search?tbm=isch&q="+encodeURIComponent(q);
 function render(){
  const q=$("q").value.toLowerCase();
- const list=books.filter(b=>(b.title+b.author+b.publisher).toLowerCase().includes(q));
+ const favs=books.filter(b=>b.fav).length;
+ $("t-all").textContent="Tümü ("+books.length+")";$("t-fav").textContent="Favoriler ("+favs+")";
+ $("t-all").classList.toggle("on",tab==="all");$("t-fav").classList.toggle("on",tab==="fav");
+ const list=books.filter(b=>(tab==="all"||b.fav)&&(b.title+b.author+b.publisher).toLowerCase().includes(q));
  $("cnt").textContent=books.length?list.length+" kitap":"";
+ if(tab==="fav"&&!favs){$("list").innerHTML='<div class="empty"><div class="eb">♡</div><b>Henüz favori kitabın yok</b><span>Kitap kartındaki kalbe dokunarak favorilere ekle.</span></div>';return}
  if(!books.length){$("list").innerHTML='<div class="empty"><div class="eb">📚</div><b>Kitaplığın henüz boş</b><span>Kitap sırtlarının fotoğrafını ekleyerek başla.</span></div>';return}
  $("list").innerHTML=list.map(b=>{
   const k=b.title+" "+b.author,h=hue(b.title),fr=b.fimg||b.front;
@@ -102,7 +117,7 @@ function render(){
   const tag=b.publisher?`<span class="tag">${esc(b.publisher)}${b.guess?" · tahmini":""}</span>`:"";
   const d=b.desc?`<p class="d">${esc(b.desc)}</p><div class="src">${esc(b.descSrc)}</div>`:"";
   const rev=b.rev?`<div class="rev"><div class="rh">1000Kitap okur yorumları</div><div class="rt">${esc(b.rev.t)}</div><a target="_blank" href="${esc(b.rev.url)}">Sayfayı aç</a></div>`:"";
-  return `<article class="book"><div class="cvs">${front}${back}</div><div class="bd">
+  return `<article class="book"><button class="heart${b.fav?" on":""}" data-fav="${b.id}" aria-label="Favori"><svg class="ic"><use href="#i-heart"/></svg></button><div class="cvs">${front}${back}</div><div class="bd">
   <div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)||"Yazar bilinmiyor"}</div>${tag}${d}${rev}
   <div class="acts"><button class="mini" data-id="${b.id}" data-side="f"><svg class="ic"><use href="#i-cam"/></svg>Ön kapak</button><button class="mini" data-id="${b.id}" data-side="b"><svg class="ic"><use href="#i-cam"/></svg>Arka kapak</button>
   <a class="mini ghost" target="_blank" href="${gi(k+" kitap kapağı")}">Kapak ara</a><button class="mini ghost" data-rev="${b.id}">${b.rev?"Yorumları yenile":"1000Kitap yorumları"}</button></div></div></article>`}).join("");
@@ -111,10 +126,11 @@ function shrink(src,max=1600,q=.85){return new Promise((ok,no)=>{const i=new Ima
 const toDataUrl=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
 const PROMPT='Bu fotoğrafta kitap sırtları var. Okunabilen her kitabı bul. Yalnızca JSON dizisi döndür: [{"title":"","author":"","publisher":"","guess":false}]. Sırtta yazanı aynen kullan. Yayınevi sırtta yoksa ve kitabı kesin tanıyorsan Türkiye baskısının yayınevini yaz, guess:true yap; emin değilsen boş bırak.';
 const GM=["gemini-3.8-flash","gemini-3.5-flash"];
+const tfetch=(u,o={},ms=60000)=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);return fetch(u,{...o,signal:c.signal}).catch(e=>{throw e&&e.name==="AbortError"?new Error("Zaman aşımı, internet bağlantısını kontrol et."):e}).finally(()=>clearTimeout(t))};
 async function models(){
  try{const c=JSON.parse(localStorage.getItem("kitappla_models")||"null");if(c&&Date.now()-c.t<864e5&&c.l.length)return c.l}catch(e){}
  try{
-  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(localStorage.getItem("kitappla_key")||""));
+  const r=proxy()?await tfetch(proxy()+"/models",{headers:hdrs()}):await tfetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(localStorage.getItem("kitappla_key")||""));
   const j=await r.json();
   const l=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")&&/^models\/gemini-[\d.]+-flash/.test(m.name)&&!/lite|image|tts|live|audio|embed|exp|vision|thinking/.test(m.name))
    .map(m=>({n:m.name.replace("models/",""),v:parseFloat(m.name.match(/gemini-([\d.]+)-flash/)[1])})).sort((a,b)=>b.v-a.v||a.n.length-b.n.length).slice(0,3).map(x=>x.n);
@@ -125,23 +141,26 @@ async function models(){
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const tr2=t=>String(t||"").replace(/[İIı]/g,"i").toLowerCase().replace(/ç/g,"c").replace(/ğ/g,"g").replace(/ö/g,"o").replace(/ş/g,"s").replace(/ü/g,"u").replace(/[^a-z0-9]+/g," ").trim();
 async function gem(parts,json){
- const key=localStorage.getItem("kitappla_key");if(!key)throw new Error("Önce sağ üstteki ayarlardan API anahtarını gir.");
+ if(!hasAccess())throw new Error("Önce sağ üstteki ayarlardan API anahtarını gir.");
+ const key=localStorage.getItem("kitappla_key"),px=proxy();
  let last="",code=0;
  for(const m of await models()){
-  const body={contents:[{parts}]};if(json)body.generationConfig={responseMimeType:"application/json"};
-  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+  const body={contents:[{parts}],generationConfig:{temperature:.2}};if(json)body.generationConfig.responseMimeType="application/json";
+  const r=await tfetch(px?px+"/generate/"+m:"https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:px?hdrs():{"content-type":"application/json"},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
   if([404,429,503].includes(r.status)){last=(j.error&&j.error.message)||("HTTP "+r.status);code=r.status;continue}
   if(!r.ok)throw new Error((j.error&&j.error.message)||r.status);
+  lastModel=m;
   return ((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||"").join("");
  }
- if(code===404)localStorage.removeItem("kitappla_models");
- const e=new Error(code===429?"Gemini istek sınırı doldu, biraz bekleyip tekrar dene.":last);e.code=code;throw e;
+if(code===404)localStorage.removeItem("kitappla_models");
+ const e=new Error(code===429?(/Günlük/.test(last)?last:"Gemini istek sınırı doldu, biraz bekleyip tekrar dene."):last);e.code=code;throw e;
 }
 async function gemRetry(parts,json){
- for(let i=0;;i++){try{return await gem(parts,json)}catch(e){if(i>=2||(e.code!==429&&e.code!==503))throw e;await sleep(8000*(i+1))}}
+ for(let i=0;;i++){try{return await gem(parts,json)}catch(e){if(i>=2||(e.code!==429&&e.code!==503)||/Günlük/.test(e.message))throw e;$("st").textContent="Gemini yoğun, "+8*(i+1)+" sn bekleniyor…";await sleep(8000*(i+1))}}
 }
-const read=async b64=>JSON.parse((await gemRetry([{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}],true)).replace(/```json|```/g,"").trim());
+const parseList=t=>{t=t.replace(/```json|```/g,"").trim();let v;try{v=JSON.parse(t)}catch(e){const a=t.indexOf("["),z=t.lastIndexOf("]");if(a<0||z<a)throw new Error("Gemini yanıtı anlaşılamadı");v=JSON.parse(t.slice(a,z+1))}if(!Array.isArray(v))v=Object.values(v).find(Array.isArray)||[];return v};
+const read=async b64=>parseList(await gemRetry([{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}],true));
 function score(v,b){
  const vt=tr2(v.title),va=tr2((v.authors||[]).join(" "));let h=0,s=0;
  tr2(b.title).split(" ").forEach(w=>{if(w.length>2&&vt.includes(w))h++});
@@ -207,11 +226,11 @@ async function loadReviews(b){
 }
 async function getRev(b){try{await loadReviews(b);save();render();$("st").textContent="Yorumlar eklendi."}catch(e){$("st").textContent="Yorumlar alınamadı: "+((e&&e.message)||e)}}
 async function process(urls){
- let n=0;
+ let n=0,found=0;
  for(const [i,u] of urls.entries()){
   $("st").textContent=`Fotoğraf ${i+1}/${urls.length} okunuyor…`;
   try{
-   const list=await read(await shrink(u));
+   const list=await read(await shrink(u));found+=list.length;
    for(const x of list){
     if(!x.title||books.some(y=>y.title.toLowerCase()===x.title.toLowerCase()))continue;
     const b={id:"b"+Math.random().toString(36).slice(2,9),title:x.title,author:x.author||"",publisher:x.publisher||"",guess:!!x.guess};
@@ -220,7 +239,7 @@ async function process(urls){
    }
   }catch(e){$("st").textContent="Hata: "+e.message;return}
  }
- $("st").textContent=`${n} yeni kitap eklendi. Toplam: ${books.length}`;
+ $("st").textContent=found?`${n} yeni kitap eklendi (${found} sırt okundu). Toplam: ${books.length}`+(lastModel?" · "+lastModel:""):"Fotoğrafta okunabilen kitap sırtı bulunamadı. Daha yakından, düz ve aydınlık çekmeyi dene.";
 }
 $("gal").onclick=async()=>{
  const C=P("Camera");if(!C)return $("fb").click();
@@ -264,7 +283,7 @@ async function coverPhoto(id,side){
  }
  $("alt2").style.display="block";
 }
-$("list").onclick=e=>{const rv=e.target.closest("button[data-rev]");if(rv){const b=books.find(x=>x.id===rv.dataset.rev);if(b)getRev(b);return}const t=e.target.closest("button[data-id]");if(t)return coverPhoto(t.dataset.id,t.dataset.side);const d=e.target.closest(".d");if(d)d.classList.toggle("open")};
+$("list").onclick=e=>{const fv=e.target.closest("button[data-fav]");if(fv){const b=books.find(x=>x.id===fv.dataset.fav);if(b){b.fav=!b.fav;save();render()}return}const rv=e.target.closest("button[data-rev]");if(rv){const b=books.find(x=>x.id===rv.dataset.rev);if(b)getRev(b);return}const t=e.target.closest("button[data-id]");if(t)return coverPhoto(t.dataset.id,t.dataset.side);const d=e.target.closest(".d");if(d)d.classList.toggle("open")};
 $("fc2").onchange=async e=>{const f=e.target.files[0];e.target.value="";$("alt2").style.display="none";if(f&&pending)setCover(pending.id,pending.side,await toDataUrl(URL.createObjectURL(f)))};
 $("fill").onclick=async()=>{
  const todo=books.filter(b=>!b.desc||!b.front);
@@ -273,6 +292,7 @@ $("fill").onclick=async()=>{
  for(const b of todo){i++;$("st").textContent=`Bilgiler tamamlanıyor ${i}/${todo.length}…`;await enrich(b);if(b.desc)ok++;if(b.err)last=b.err;save();render();await sleep(1200)}
  $("st").textContent=`${ok}/${todo.length} kitabın bilgisi tamamlandı.`+(ok<todo.length&&last?" Son hata: "+last.trim():"");
 };
+const exportList=()=>tab==="fav"?books.filter(b=>b.fav):books;
 async function shareFile(name,b64){
  const F=P("Filesystem"),S=P("Share");
  if(!F||!S)throw new Error("Paylaşma eklentisi yok (uygulamayı güncelle).");
@@ -281,26 +301,34 @@ async function shareFile(name,b64){
 }
 function loadXlsx(){return new Promise((ok,no)=>{if(window.XLSX)return ok();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";s.onload=ok;s.onerror=()=>no(new Error("Excel kütüphanesi yüklenemedi (internet?)"));document.head.appendChild(s)})}
 $("xl").onclick=async()=>{
- if(!books.length)return $("st").textContent="Liste boş.";
+ if(!exportList().length)return $("st").textContent="Aktarılacak kitap yok.";
  try{await loadXlsx();
-  const rows=[["Kitap","Yazar","Yayınevi","Kısa bilgi","Bilgi kaynağı","Okur yorumları (1000Kitap)"],...books.map(b=>[b.title,b.author,b.publisher,b.desc||"",b.descSrc||"",b.rev?b.rev.t:""])];
-  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:36},{wch:24},{wch:22},{wch:80},{wch:18},{wch:80}];
+  const rows=[["Kitap","Yazar","Yayınevi","Kısa bilgi","Bilgi kaynağı","Okur yorumları (1000Kitap)","Favori"],...exportList().map(b=>[b.title,b.author,b.publisher,b.desc||"",b.descSrc||"",b.rev?b.rev.t:"",b.fav?"★":""])];
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:36},{wch:24},{wch:22},{wch:80},{wch:18},{wch:80},{wch:8}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Kitaplık");
   await shareFile("kitappla.xlsx",XLSX.write(wb,{bookType:"xlsx",type:"base64"}));
  }catch(e){$("st").textContent="Excel hatası: "+((e&&e.message)||e)}
 };
 function pdfPages(){
- const W=1240,H=1754,M=80,pages=[];let c,x,y;
- const np=()=>{c=document.createElement("canvas");c.width=W;c.height=H;x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,W,H);y=M;pages.push(c)};
- const wrap=(t,f,w)=>{x.font=f;const out=[];let line="";for(const word of String(t||"").split(/\s+/)){const tt=line?line+" "+word:word;if(x.measureText(tt).width>w&&line){out.push(line);line=word}else line=tt}if(line)out.push(line);return out};
- const draw=(ls,f,col,lh)=>{x.font=f;x.fillStyle=col;ls.forEach(l=>{y+=lh;x.fillText(l,M,y)})};
- np();x.fillStyle="#b5472b";x.font="bold 54px sans-serif";x.fillText("Kitaplığım",M,y+40);y+=100;
- books.forEach((b,i)=>{
-  const fw=W-2*M,tl=wrap((i+1)+". "+b.title,"bold 34px sans-serif",fw);
-  const al=wrap([b.author,b.publisher].filter(Boolean).join(" · "),"28px sans-serif",fw);
-  const dl=wrap(b.desc,"26px sans-serif",fw),rl=b.rev?wrap("Okur yorumları: "+b.rev.t.replace(/\s*\n\s*/g," "),"24px sans-serif",fw):[];
-  if(y+tl.length*44+al.length*38+dl.length*34+rl.length*32+50>H-M)np();
-  draw(tl,"bold 34px sans-serif","#000",44);draw(al,"28px sans-serif","#555",38);draw(dl,"26px sans-serif","#222",34);draw(rl,"24px sans-serif","#7a3b1f",32);y+=50;
+ const W=1754,H=1240,M=50,list=exportList(),pages=[];let c,x,y;
+ const C=[{h:"#",w:54},{h:"Kitap",w:300},{h:"Yazar",w:210},{h:"Yayınevi",w:230},{h:"Kısa bilgi",w:470},{h:"Okur yorumları",w:390}];
+ const FS="21px sans-serif",FB="bold 21px sans-serif",LH=28,PAD=10;
+ const wrap=(t,w,f)=>{x.font=f;const out=[];let line="";for(const word of String(t||"").split(/\s+/)){const tt=line?line+" "+word:word;if(x.measureText(tt).width>w&&line){out.push(line);line=word}else line=tt}if(line)out.push(line);if(out.length>14){out.length=14;out[13]=out[13].slice(0,-2)+"…"}return out};
+ const head=()=>{let cx=M;x.fillStyle="#d9531e";x.fillRect(M,y,W-2*M,44);x.fillStyle="#fff";x.font=FB;C.forEach(k=>{x.fillText(k.h,cx+PAD,y+30);cx+=k.w});y+=44};
+ const np=()=>{c=document.createElement("canvas");c.width=W;c.height=H;x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,W,H);y=M;pages.push(c);if(pages.length===1){x.fillStyle="#d9531e";x.font="bold 40px sans-serif";x.fillText("Kitaplığım"+(tab==="fav"?" – Favoriler":""),M,y+34);y+=60}head()};
+ np();
+ list.forEach((b,i)=>{
+  const cells=[String(i+1),(b.fav?"★ ":"")+b.title,b.author||"",b.publisher||"",b.desc||"",b.rev?b.rev.t.replace(/\s*\n\s*/g," "):""];
+  const lines=cells.map((t,k)=>wrap(t,C[k].w-2*PAD,k===1?FB:FS));
+  const rh=Math.max(...lines.map(l=>l.length))*LH+2*PAD;
+  if(y+rh>H-M)np();
+  if(i%2===1){x.fillStyle="#faf5f0";x.fillRect(M,y,W-2*M,rh)}
+  let cx=M;
+  lines.forEach((ls,k)=>{x.font=k===1?FB:FS;x.fillStyle=(k===2||k===3)?"#57534e":"#1c1917";ls.forEach((l,j)=>x.fillText(l,cx+PAD,y+PAD+LH*(j+1)-7));cx+=C[k].w});
+  x.strokeStyle="#d6d3d1";x.lineWidth=1.5;
+  let vx=M;for(const k of C){x.beginPath();x.moveTo(vx,y);x.lineTo(vx,y+rh);x.stroke();vx+=k.w}
+  x.beginPath();x.moveTo(W-M,y);x.lineTo(W-M,y+rh);x.stroke();
+  y+=rh;x.beginPath();x.moveTo(M,y);x.lineTo(W-M,y);x.stroke();
  });
  return pages.map(p=>p.toDataURL("image/jpeg",.9).split(",")[1]);
 }
@@ -312,10 +340,10 @@ function makePdf(jpgs){
  obj(1,()=>add("<< /Type /Catalog /Pages 2 0 R >>"));
  obj(2,()=>add("<< /Type /Pages /Count "+N+" /Kids ["+jpgs.map((_,i)=>(3+3*i)+" 0 R").join(" ")+"] >>"));
  jpgs.forEach((j,i)=>{
-  const bin=Uint8Array.from(atob(j),ch=>ch.charCodeAt(0)),cs="q 595 0 0 842 0 0 cm /Im0 Do Q";
-  obj(3+3*i,()=>add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 "+(5+3*i)+" 0 R >> >> /Contents "+(4+3*i)+" 0 R >>"));
+  const bin=Uint8Array.from(atob(j),ch=>ch.charCodeAt(0)),cs="q 842 0 0 595 0 0 cm /Im0 Do Q";
+  obj(3+3*i,()=>add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /XObject << /Im0 "+(5+3*i)+" 0 R >> >> /Contents "+(4+3*i)+" 0 R >>"));
   obj(4+3*i,()=>add("<< /Length "+cs.length+" >>\nstream\n"+cs+"\nendstream"));
-  obj(5+3*i,()=>{add("<< /Type /XObject /Subtype /Image /Width 1240 /Height 1754 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+bin.length+" >>\nstream\n");add(bin);add("\nendstream")});
+  obj(5+3*i,()=>{add("<< /Type /XObject /Subtype /Image /Width 1754 /Height 1240 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+bin.length+" >>\nstream\n");add(bin);add("\nendstream")});
  });
  const xr=len,total=3+3*N;
  add("xref\n0 "+total+"\n0000000000 65535 f \n");
@@ -326,11 +354,13 @@ function makePdf(jpgs){
  return btoa(s);
 }
 $("pdf").onclick=async()=>{
- if(!books.length)return $("st").textContent="Liste boş.";
+ if(!exportList().length)return $("st").textContent="Aktarılacak kitap yok.";
  try{$("st").textContent="PDF hazırlanıyor…";await shareFile("kitappla.pdf",makePdf(pdfPages()));$("st").textContent=""}
  catch(e){$("st").textContent="PDF hatası: "+((e&&e.message)||e)}
 };
 $("q").oninput=render;
+$("t-all").onclick=()=>{tab="all";render()};
+$("t-fav").onclick=()=>{tab="fav";render()};
 if(!localStorage.getItem("kitappla_key"))$("st").textContent="Başlamak için sağ üstteki ayarlar simgesinden Gemini API anahtarını gir.";
 render();
 </script></body></html>
