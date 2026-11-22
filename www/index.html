@@ -62,7 +62,7 @@ button{font:inherit;cursor:pointer;border:0}
 </defs></svg>
 <div class="bar"><h1>kitap<span>pla</span></h1><button class="icon" id="cfg" aria-label="Ayarlar"><svg class="ic"><use href="#i-set"/></svg></button></div>
 <main>
-<div id="set"><b>Gemini API anahtarı</b><input class="f" id="key" type="password" placeholder="AIza..."><b style="margin-top:12px">Sunucu adresi (isteğe bağlı)</b><input class="f" id="purl" type="url" placeholder="https://kitappla.xxx.workers.dev"><button id="ksave">Kaydet</button><div style="margin-top:8px;color:var(--mu);font-size:12.5px">Sunucu adresi girilirse anahtar gerekmez. Bilgiler yalnızca bu telefonda saklanır.</div></div>
+<div id="set"><b>Gemini API anahtarı</b><input class="f" id="key" type="password" placeholder="AIza..."><b style="margin-top:12px">Sunucu adresi (isteğe bağlı)</b><input class="f" id="purl" type="url" placeholder="https://kitappla.xxx.workers.dev"><button id="ksave">Kaydet</button><button id="ttest" class="mini ghost" style="margin-left:8px;padding:11px 14px">Bağlantıyı test et</button><div id="tres" style="white-space:pre-line;margin-top:10px;font-size:12.5px;color:var(--mu)"></div><div style="margin-top:8px;color:var(--mu);font-size:12.5px">Sunucu adresi girilirse anahtar gerekmez. Bilgiler yalnızca bu telefonda saklanır.</div></div>
 <div class="tiles">
 <button class="tile" id="gal"><svg class="ic"><use href="#i-img"/></svg><span>Galeriden ekle<small>Sırt fotoğrafı seç</small></span></button>
 <button class="tile" id="cam"><svg class="ic"><use href="#i-cam"/></svg><span>Kamera<small>Fotoğraf çek</small></span></button>
@@ -79,7 +79,7 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 7</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 8</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <script>
@@ -94,6 +94,25 @@ window.onerror=(m,u,l)=>{const s=$("st");if(s)s.textContent="Hata: "+m+(l?" (sat
 $("cfg").onclick=()=>{const s=$("set");s.style.display=s.style.display==="block"?"none":"block";$("key").value=localStorage.getItem("kitappla_key")||"";$("purl").value=localStorage.getItem("kitappla_proxy")||""};
 $("ksave").onclick=()=>{localStorage.setItem("kitappla_key",$("key").value.trim());localStorage.setItem("kitappla_proxy",$("purl").value.trim());localStorage.removeItem("kitappla_models");$("set").style.display="none";$("st").textContent="Ayarlar kaydedildi."};
 if(!hasAccess())$("set").style.display="block";
+$("ttest").onclick=async()=>{
+ const out=$("tres"),log=t=>{out.textContent+=t+"\n"};out.textContent="";
+ if(!hasAccess()){log("Önce anahtar ya da sunucu adresi gir ve Kaydet'e bas.");return}
+ localStorage.removeItem("kitappla_models");localStorage.removeItem(GOOD);
+ let list;try{list=await models()}catch(e){list=GM}
+ log("Denenecek modeller: "+list.join(", "));
+ const c=document.createElement("canvas");c.width=240;c.height=90;const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,240,90);x.fillStyle="#000";x.font="bold 44px sans-serif";x.fillText("KITAP",20,62);
+ const img=c.toDataURL("image/jpeg",.9).split(",")[1];let okm="";
+ for(const m of list){
+  const t0=Date.now();
+  try{
+   const r=await genReq(m,{contents:[{parts:[{inline_data:{mime_type:"image/jpeg",data:img}},{text:"Resimde ne yazıyor? Tek kelime yaz."}]}]},30000);
+   const j=await r.json().catch(()=>({})),sn=((Date.now()-t0)/1000).toFixed(1);
+   if(r.ok){const p=(((j.candidates||[])[0]||{}).content||{}).parts;log("✓ "+m+" · "+sn+" sn · yanıt: "+((p&&p[0]&&p[0].text)||"").trim().slice(0,30));if(!okm){okm=m;localStorage.setItem(GOOD,m)}}
+   else log("✗ "+m+" · HTTP "+r.status+" · "+((j.error&&j.error.message)||"").slice(0,120));
+  }catch(e){log("✗ "+m+" · "+e.message)}
+ }
+ log(okm?"Çalışan model seçildi: "+okm:"Hiçbir model çalışmadı. Bu satırları bana gönder.");
+};
 let books=[];try{books=JSON.parse(localStorage.getItem("kitappla")||"[]")}catch(e){}
 books.forEach(b=>{if(!b.id)b.id="b"+Math.random().toString(36).slice(2,9)});
 const save=()=>{try{localStorage.setItem("kitappla",JSON.stringify(books))}catch(e){$("st").textContent="Kayıt alanı doldu, son değişiklik kaydedilemedi."}};
@@ -127,13 +146,16 @@ const toDataUrl=async u=>{const b=await (await fetch(u)).blob();return new Promi
 const PROMPT='Bu fotoğrafta kitap sırtları var. Okunabilen her kitabı bul. Yalnızca JSON dizisi döndür: [{"title":"","author":"","publisher":"","guess":false}]. Sırtta yazanı aynen kullan. Yayınevi sırtta yoksa ve kitabı kesin tanıyorsan Türkiye baskısının yayınevini yaz, guess:true yap; emin değilsen boş bırak.';
 const GM=["gemini-3.8-flash","gemini-3.5-flash"];
 const tfetch=(u,o={},ms=60000)=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);return fetch(u,{...o,signal:c.signal}).catch(e=>{throw e&&e.name==="AbortError"?new Error("Zaman aşımı, internet bağlantısını kontrol et."):e}).finally(()=>clearTimeout(t))};
+const GOOD="kitappla_good";
+const genReq=(m,body,ms)=>{const px=proxy(),key=localStorage.getItem("kitappla_key");return tfetch(px?px+"/generate/"+m:"https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:px?hdrs():{"content-type":"application/json"},body:JSON.stringify(body)},ms)};
+async function modelOrder(){const l=await models(),g=localStorage.getItem(GOOD);return g?[g,...l.filter(x=>x!==g)]:l}
 async function models(){
  try{const c=JSON.parse(localStorage.getItem("kitappla_models")||"null");if(c&&Date.now()-c.t<864e5&&c.l.length)return c.l}catch(e){}
  try{
-  const r=proxy()?await tfetch(proxy()+"/models",{headers:hdrs()}):await tfetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(localStorage.getItem("kitappla_key")||""));
+  const r=proxy()?await tfetch(proxy()+"/models",{headers:hdrs()},15000):await tfetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(localStorage.getItem("kitappla_key")||""),{},15000);
   const j=await r.json();
   const l=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")&&/^models\/gemini-[\d.]+-flash/.test(m.name)&&!/lite|image|tts|live|audio|embed|exp|vision|thinking/.test(m.name))
-   .map(m=>({n:m.name.replace("models/",""),v:parseFloat(m.name.match(/gemini-([\d.]+)-flash/)[1])})).sort((a,b)=>b.v-a.v||a.n.length-b.n.length).slice(0,3).map(x=>x.n);
+   .map(m=>({n:m.name.replace("models/",""),v:parseFloat(m.name.match(/gemini-([\d.]+)-flash/)[1])})).sort((a,b)=>b.v-a.v||a.n.length-b.n.length).slice(0,4).map(x=>x.n);
   if(l.length){localStorage.setItem("kitappla_models",JSON.stringify({t:Date.now(),l}));return l}
  }catch(e){}
  return GM;
@@ -142,19 +164,19 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const tr2=t=>String(t||"").replace(/[İIı]/g,"i").toLowerCase().replace(/ç/g,"c").replace(/ğ/g,"g").replace(/ö/g,"o").replace(/ş/g,"s").replace(/ü/g,"u").replace(/[^a-z0-9]+/g," ").trim();
 async function gem(parts,json){
  if(!hasAccess())throw new Error("Önce sağ üstteki ayarlardan API anahtarını gir.");
- const key=localStorage.getItem("kitappla_key"),px=proxy();
  let last="",code=0;
- for(const m of await models()){
-  const body={contents:[{parts}],generationConfig:{temperature:.2}};if(json)body.generationConfig.responseMimeType="application/json";
-  const r=await tfetch(px?px+"/generate/"+m:"https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:px?hdrs():{"content-type":"application/json"},body:JSON.stringify(body)});
+ for(const m of await modelOrder()){
+  const body={contents:[{parts}]};if(json)body.generationConfig={responseMimeType:"application/json"};
+  let r;
+  try{r=await genReq(m,body,45000)}catch(e){if(/Zaman/.test(e.message)){last=m+": yanıt gelmedi (45 sn)";if(localStorage.getItem(GOOD)===m)localStorage.removeItem(GOOD);continue}throw e}
   const j=await r.json().catch(()=>({}));
-  if([404,429,503].includes(r.status)){last=(j.error&&j.error.message)||("HTTP "+r.status);code=r.status;continue}
+  if([404,429,503].includes(r.status)){last=(j.error&&j.error.message)||("HTTP "+r.status);code=r.status;if(r.status===404&&localStorage.getItem(GOOD)===m)localStorage.removeItem(GOOD);continue}
   if(!r.ok)throw new Error((j.error&&j.error.message)||r.status);
-  lastModel=m;
+  lastModel=m;localStorage.setItem(GOOD,m);
   return ((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||"").join("");
  }
-if(code===404)localStorage.removeItem("kitappla_models");
- const e=new Error(code===429?(/Günlük/.test(last)?last:"Gemini istek sınırı doldu, biraz bekleyip tekrar dene."):last);e.code=code;throw e;
+ if(code===404)localStorage.removeItem("kitappla_models");
+ const e=new Error(code===429?(/Günlük/.test(last)?last:"Gemini istek sınırı doldu, biraz bekleyip tekrar dene."):(last||"Gemini yanıt vermedi"));e.code=code;throw e;
 }
 async function gemRetry(parts,json){
  for(let i=0;;i++){try{return await gem(parts,json)}catch(e){if(i>=2||(e.code!==429&&e.code!==503)||/Günlük/.test(e.message))throw e;$("st").textContent="Gemini yoğun, "+8*(i+1)+" sn bekleniyor…";await sleep(8000*(i+1))}}
