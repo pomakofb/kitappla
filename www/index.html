@@ -73,7 +73,7 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="search"><svg class="ic"><use href="#i-q"/></svg><input class="f" id="q" placeholder="Kitap, yazar veya yayınevi ara"></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 5</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 6</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <script>
@@ -110,13 +110,24 @@ function render(){
 function shrink(src,max=1600,q=.85){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const s=Math.min(1,max/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",q).split(",")[1])};i.onerror=no;i.src=src})}
 const toDataUrl=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
 const PROMPT='Bu fotoğrafta kitap sırtları var. Okunabilen her kitabı bul. Yalnızca JSON dizisi döndür: [{"title":"","author":"","publisher":"","guess":false}]. Sırtta yazanı aynen kullan. Yayınevi sırtta yoksa ve kitabı kesin tanıyorsan Türkiye baskısının yayınevini yaz, guess:true yap; emin değilsen boş bırak.';
-const GM=["gemini-3.5-flash","gemini-2.5-flash"];
+const GM=["gemini-3.8-flash","gemini-3.5-flash"];
+async function models(){
+ try{const c=JSON.parse(localStorage.getItem("kitappla_models")||"null");if(c&&Date.now()-c.t<864e5&&c.l.length)return c.l}catch(e){}
+ try{
+  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(localStorage.getItem("kitappla_key")||""));
+  const j=await r.json();
+  const l=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")&&/^models\/gemini-[\d.]+-flash/.test(m.name)&&!/lite|image|tts|live|audio|embed|exp|vision|thinking/.test(m.name))
+   .map(m=>({n:m.name.replace("models/",""),v:parseFloat(m.name.match(/gemini-([\d.]+)-flash/)[1])})).sort((a,b)=>b.v-a.v||a.n.length-b.n.length).slice(0,3).map(x=>x.n);
+  if(l.length){localStorage.setItem("kitappla_models",JSON.stringify({t:Date.now(),l}));return l}
+ }catch(e){}
+ return GM;
+}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const tr2=t=>String(t||"").replace(/[İIı]/g,"i").toLowerCase().replace(/ç/g,"c").replace(/ğ/g,"g").replace(/ö/g,"o").replace(/ş/g,"s").replace(/ü/g,"u").replace(/[^a-z0-9]+/g," ").trim();
 async function gem(parts,json){
  const key=localStorage.getItem("kitappla_key");if(!key)throw new Error("Önce sağ üstteki ayarlardan API anahtarını gir.");
  let last="",code=0;
- for(const m of GM){
+ for(const m of await models()){
   const body={contents:[{parts}]};if(json)body.generationConfig={responseMimeType:"application/json"};
   const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
@@ -124,6 +135,7 @@ async function gem(parts,json){
   if(!r.ok)throw new Error((j.error&&j.error.message)||r.status);
   return ((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||"").join("");
  }
+ if(code===404)localStorage.removeItem("kitappla_models");
  const e=new Error(code===429?"Gemini istek sınırı doldu, biraz bekleyip tekrar dene.":last);e.code=code;throw e;
 }
 async function gemRetry(parts,json){
