@@ -79,13 +79,13 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 9</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 10</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <script>
 
 const $=id=>document.getElementById(id);
-const PROXY="",TOKEN="";
+const PROXY="https://kitappla.pomak-ofb.workers.dev",TOKEN="";
 const proxy=()=>(localStorage.getItem("kitappla_proxy")||PROXY).replace(/\/+$/,"");
 const hdrs=()=>TOKEN?{"content-type":"application/json","x-app-token":TOKEN}:{"content-type":"application/json"};
 const hasAccess=()=>!!(proxy()||localStorage.getItem("kitappla_key"));
@@ -160,7 +160,7 @@ async function callModel(m,parts,json,ms){
  return{r,j};
 }
 const genReq=(m,body,ms)=>{const px=proxy(),key=localStorage.getItem("kitappla_key");return tfetch(px?px+"/generate/"+m:"https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:px?hdrs():{"content-type":"application/json"},body:JSON.stringify(body)},ms)};
-async function modelOrder(){const l=await models(),g=localStorage.getItem(GOOD);return g?[g,...l.filter(x=>x!==g)]:l}
+async function modelOrder(){let l=await models();const pf="gemini-3-flash-preview";if(l.includes(pf))l=[pf,...l.filter(x=>x!==pf)];const g=localStorage.getItem(GOOD);return g?[g,...l.filter(x=>x!==g)]:l}
 async function models(){
  try{const c=JSON.parse(localStorage.getItem("kitappla_models")||"null");if(c&&Date.now()-c.t<864e5&&c.l.length)return c.l}catch(e){}
  try{
@@ -393,6 +393,6 @@ $("pdf").onclick=async()=>{
 $("q").oninput=render;
 $("t-all").onclick=()=>{tab="all";render()};
 $("t-fav").onclick=()=>{tab="fav";render()};
-if(!localStorage.getItem("kitappla_key"))$("st").textContent="Başlamak için sağ üstteki ayarlar simgesinden Gemini API anahtarını gir.";
+if(!hasAccess())$("st").textContent="Başlamak için sağ üstteki ayarlar simgesinden Gemini API anahtarını gir.";
 render();
 </script></body></html>
