@@ -73,12 +73,17 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="search"><svg class="ic"><use href="#i-q"/></svg><input class="f" id="q" placeholder="Kitap, yazar veya yayınevi ara"></div>
 <div id="cnt"></div>
 <div id="list"></div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 5</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <script>
 
 const $=id=>document.getElementById(id);
-let books=JSON.parse(localStorage.getItem("kitappla")||"[]");
+window.onerror=(m,u,l)=>{const s=$("st");if(s)s.textContent="Hata: "+m+(l?" (satır "+l+")":"")};
+$("cfg").onclick=()=>{const s=$("set");s.style.display=s.style.display==="block"?"none":"block";$("key").value=localStorage.getItem("kitappla_key")||""};
+$("ksave").onclick=()=>{localStorage.setItem("kitappla_key",$("key").value.trim());$("set").style.display="none";$("st").textContent="Anahtar kaydedildi."};
+if(!localStorage.getItem("kitappla_key"))$("set").style.display="block";
+let books=[];try{books=JSON.parse(localStorage.getItem("kitappla")||"[]")}catch(e){}
 books.forEach(b=>{if(!b.id)b.id="b"+Math.random().toString(36).slice(2,9)});
 const save=()=>{try{localStorage.setItem("kitappla",JSON.stringify(books))}catch(e){$("st").textContent="Kayıt alanı doldu, son değişiklik kaydedilemedi."}};
 const P=n=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins[n];
@@ -226,16 +231,4 @@ $("cam").onclick=async()=>{
  $("alt").style.display="block";
 };
 $("fc").onchange=async e=>{$("alt").style.display="none";process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
-$("fb").onchange=async e=>{process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
-let pending=null;
-async function setCover(id,side,url){
- const b=books.find(x=>x.id===id);if(!b)return;
- b[side==="f"?"fimg":"bimg"]="data:image/jpeg;base64,"+await shrink(url,360,.75);save();render();
-}
-async function coverPhoto(id,side){
- pending={id,side};const C=P("Camera");
- if(C){
-  try{
-   try{await C.requestPermissions({permissions:["camera"]})}catch(e){}
-   const p=await C.getPhoto({source:"PROMPT",resultType:"dataUrl",quality:80,promptLabelHeader:"Kapak fotoğrafı",promptLabelPhoto:"Galeriden seç",promptLabelPicture:"Fotoğraf çek"});
-   return setCover(id,side,p
+$("fb").onchange=async e=>{process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.create
