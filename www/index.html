@@ -44,6 +44,7 @@ button{font:inherit;cursor:pointer;border:0}
 .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .mini{display:inline-flex;align-items:center;gap:5px;padding:7px 11px;border-radius:10px;background:color-mix(in srgb,var(--ac) 10%,transparent);color:var(--ac);font-size:12.5px;font-weight:600;text-decoration:none}
 .mini .ic{width:14px;height:14px}.mini.ghost{background:transparent;border:1px solid var(--bd);color:var(--mu)}
+.rev{margin-top:12px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--ac) 7%,transparent)}.rh{font-size:12px;font-weight:700;color:var(--ac);margin-bottom:4px}.rt{font-size:13px;white-space:pre-line}.rev a{font-size:12px;color:var(--ac);font-weight:600;display:inline-block;margin-top:6px}
 .empty{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:56px 24px;color:var(--mu)}.empty b{color:var(--tx);font-size:17px}.eb{font-size:46px}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute"><defs>
@@ -95,43 +96,99 @@ function render(){
   const back=b.bimg?`<img class="cv sm" src="${esc(b.bimg)}" alt="">`:"";
   const tag=b.publisher?`<span class="tag">${esc(b.publisher)}${b.guess?" · tahmini":""}</span>`:"";
   const d=b.desc?`<p class="d">${esc(b.desc)}</p><div class="src">${esc(b.descSrc)}</div>`:"";
+  const rev=b.rev?`<div class="rev"><div class="rh">1000Kitap okur yorumları</div><div class="rt">${esc(b.rev.t)}</div><a target="_blank" href="${esc(b.rev.url)}">Sayfayı aç</a></div>`:"";
   return `<article class="book"><div class="cvs">${front}${back}</div><div class="bd">
-  <div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)||"Yazar bilinmiyor"}</div>${tag}${d}
+  <div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)||"Yazar bilinmiyor"}</div>${tag}${d}${rev}
   <div class="acts"><button class="mini" data-id="${b.id}" data-side="f"><svg class="ic"><use href="#i-cam"/></svg>Ön kapak</button><button class="mini" data-id="${b.id}" data-side="b"><svg class="ic"><use href="#i-cam"/></svg>Arka kapak</button>
-  <a class="mini ghost" target="_blank" href="${gi(k+" kitap kapağı")}">Kapak ara</a><a class="mini ghost" target="_blank" href="https://www.amazon.com.tr/s?k=${encodeURIComponent(k)}">Amazon.com.tr</a></div></div></article>`}).join("");
+  <a class="mini ghost" target="_blank" href="${gi(k+" kitap kapağı")}">Kapak ara</a><button class="mini ghost" data-rev="${b.id}">${b.rev?"Yorumları yenile":"1000Kitap yorumları"}</button></div></div></article>`}).join("");
 }
 function shrink(src,max=1600,q=.85){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const s=Math.min(1,max/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",q).split(",")[1])};i.onerror=no;i.src=src})}
 const toDataUrl=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
 const PROMPT='Bu fotoğrafta kitap sırtları var. Okunabilen her kitabı bul. Yalnızca JSON dizisi döndür: [{"title":"","author":"","publisher":"","guess":false}]. Sırtta yazanı aynen kullan. Yayınevi sırtta yoksa ve kitabı kesin tanıyorsan Türkiye baskısının yayınevini yaz, guess:true yap; emin değilsen boş bırak.';
 const GM=["gemini-3.5-flash","gemini-2.5-flash"];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const tr2=t=>String(t||"").replace(/[İIı]/g,"i").toLowerCase().replace(/ç/g,"c").replace(/ğ/g,"g").replace(/ö/g,"o").replace(/ş/g,"s").replace(/ü/g,"u").replace(/[^a-z0-9]+/g," ").trim();
 async function gem(parts,json){
  const key=localStorage.getItem("kitappla_key");if(!key)throw new Error("Önce sağ üstteki ayarlardan API anahtarını gir.");
- let last="";
+ let last="",code=0;
  for(const m of GM){
   const body={contents:[{parts}]};if(json)body.generationConfig={responseMimeType:"application/json"};
   const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
-  const j=await r.json();
-  if(r.status===404){last=(j.error&&j.error.message)||"model yok";continue}
+  const j=await r.json().catch(()=>({}));
+  if([404,429,503].includes(r.status)){last=(j.error&&j.error.message)||("HTTP "+r.status);code=r.status;continue}
   if(!r.ok)throw new Error((j.error&&j.error.message)||r.status);
   return ((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||"").join("");
  }
- throw new Error(last);
+ const e=new Error(code===429?"Gemini istek sınırı doldu, biraz bekleyip tekrar dene.":last);e.code=code;throw e;
 }
-const read=async b64=>JSON.parse((await gem([{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}],true)).replace(/```json|```/g,"").trim());
+async function gemRetry(parts,json){
+ for(let i=0;;i++){try{return await gem(parts,json)}catch(e){if(i>=2||(e.code!==429&&e.code!==503))throw e;await sleep(8000*(i+1))}}
+}
+const read=async b64=>JSON.parse((await gemRetry([{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}],true)).replace(/```json|```/g,"").trim());
+function score(v,b){
+ const vt=tr2(v.title),va=tr2((v.authors||[]).join(" "));let h=0,s=0;
+ tr2(b.title).split(" ").forEach(w=>{if(w.length>2&&vt.includes(w))h++});
+ if(b.author)tr2(b.author).split(" ").forEach(w=>{if(w.length>2&&va.includes(w))s++});
+ return h?h*3+s*2+(v.description?1:0)+(v.imageLinks?1:0):0;
+}
+async function gbooks(b){
+ const qs=["intitle:"+b.title+(b.author?" inauthor:"+b.author:""),b.title+" "+(b.author||"")];
+ for(const q of qs){
+  for(let t=0;t<2;t++){
+   const r=await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=8&q="+encodeURIComponent(q));
+   if(r.status===429){await sleep(1500);continue}
+   if(!r.ok)throw new Error("Google Books "+r.status);
+   const items=((await r.json()).items||[]).map(i=>i.volumeInfo).filter(Boolean).sort((x,y)=>score(y,b)-score(x,b));
+   if(items.length&&score(items[0],b)>=3)return items[0];
+   break;
+  }
+ }
+ return null;
+}
 async function enrich(b){
- if(!b.front||!b.desc){
-  try{const q=encodeURIComponent("intitle:"+b.title+(b.author?" inauthor:"+b.author:""));
-   const j=await (await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=1&q="+q)).json();
-   const v=j.items&&j.items[0]&&j.items[0].volumeInfo;
+ b.err="";
+ if(!b.front||!b.desc||!b.publisher){
+  try{const v=await gbooks(b);
    if(v){const im=v.imageLinks;if(im&&!b.front)b.front=(im.thumbnail||im.smallThumbnail).replace("http://","https://");
     if(!b.publisher&&v.publisher){b.publisher=v.publisher;b.guess=true}
-    if(!b.desc&&v.description){b.desc=v.description.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,380);b.descSrc="Google Books"}}}catch(e){}
+    if(!b.desc&&v.description){b.desc=v.description.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,380);b.descSrc="Google Books"}}}
+  catch(e){b.err="Google Books: "+e.message}
  }
  if(!b.front){try{const j=await (await fetch("https://openlibrary.org/search.json?limit=1&fields=cover_i&title="+encodeURIComponent(b.title)+"&author="+encodeURIComponent(b.author||""))).json();
   const c=j.docs&&j.docs[0]&&j.docs[0].cover_i;if(c)b.front="https://covers.openlibrary.org/b/id/"+c+"-M.jpg"}catch(e){}}
- if(!b.desc){try{const t=await gem([{text:'"'+b.title+'" ('+(b.author||"yazar bilinmiyor")+') kitabı için Türkçe, en fazla 2 cümlelik, tarafsız kısa bir içerik özeti yaz. Kitabı tanımıyorsan ayrıntı uydurma, sadece "Bu kitap hakkında bilgi bulunamadı." yaz. Sadece özeti yaz.'}],false);
-  if(t.trim()&&!/bilgi bulunamadı/i.test(t)){b.desc=t.trim().slice(0,380);b.descSrc="yapay zekâ özeti"}}catch(e){}}
+ if(!b.desc){try{const t=await gemRetry([{text:'"'+b.title+'" ('+(b.author||"yazar bilinmiyor")+') kitabı için Türkçe, en fazla 2 cümlelik, tarafsız kısa bir içerik özeti yaz. Kitabı tanımıyorsan ayrıntı uydurma, sadece "Bu kitap hakkında bilgi bulunamadı." yaz. Sadece özeti yaz.'}],false);
+  if(t.trim()&&!/bilgi bulunamadı/i.test(t)){b.desc=t.trim().slice(0,380);b.descSrc="yapay zekâ özeti"}else b.err+=" Kitap tanınmadı."}catch(e){b.err+=" Gemini: "+e.message}}
+ return !!b.desc;
 }
+let chain=Promise.resolve();
+const enq=b=>{chain=chain.then(async()=>{await enrich(b);save();render();await sleep(1200)}).catch(()=>{});return chain};
+const http=async url=>{
+ const H=P("CapacitorHttp"),hd={"User-Agent":"Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"};
+ if(H){const r=await H.get({url,headers:hd,responseType:"text"});if(r.status>=400)throw new Error("HTTP "+r.status);return typeof r.data==="string"?r.data:JSON.stringify(r.data)}
+ const r=await fetch(url);if(!r.ok)throw new Error("HTTP "+r.status);return r.text();
+};
+async function findKUrl(b){
+ const q="site:1000kitap.com/kitap "+b.title+" "+(b.author||"");let err="";
+ for(const e of ["https://html.duckduckgo.com/html/?q=","https://www.bing.com/search?q="]){
+  try{const h=(await http(e+encodeURIComponent(q))).replace(/%3A/gi,":").replace(/%2F/gi,"/");
+   const m=[...h.matchAll(/1000kitap\.com\/kitap\/([A-Za-z0-9\-_%.]+?--\d+)/g)].map(x=>x[1]);
+   if(m.length){const t=tr2(b.title).split(" ")[0];return "https://1000kitap.com/kitap/"+(m.find(x=>tr2(x.replace(/--\d+$/,"")).startsWith(t))||m[0])}
+   err="sonuç yok"}catch(x){err=e.split("/")[2]+": "+x.message}
+ }
+ throw new Error("Kitap sayfası bulunamadı ("+err+")");
+}
+async function loadReviews(b){
+ $("st").textContent="1000Kitap sayfası aranıyor…";
+ const url=b.kUrl||await findKUrl(b);b.kUrl=url;
+ $("st").textContent="Yorumlar okunuyor…";
+ let h=(await http(url)).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g,"\n").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&#39;|&apos;/g,"'").replace(/&quot;/g,'"').replace(/[ \t]+/g," ").replace(/\n\s*\n+/g,"\n");
+ const i=Math.max(0,h.indexOf("Yorumlar ve İncelemeler")),txt=h.slice(i,i+7000);
+ if(txt.length<200)throw new Error("Sayfada yorum metni bulunamadı");
+ $("st").textContent="Yorumlar özetleniyor…";
+ const t=await gemRetry([{text:'Aşağıda 1000Kitap sitesinden "'+b.title+'" kitabı için okur yorumlarını içeren ham sayfa metni var. Okurların genel izlenimini Türkiye Türkçesiyle en fazla 3 kısa madde halinde özetle (beğenilenler, eleştirilenler, kimlere önerildiği). Yorumlardan cümle alıntılama, kullanıcı adı yazma. Okur yorumu yoksa sadece "Yorum bulunamadı." yaz. Her maddeyi "• " ile başlat.\n\n'+txt}],false);
+ b.rev={t:t.trim().slice(0,700),url};
+}
+async function getRev(b){try{await loadReviews(b);save();render();$("st").textContent="Yorumlar eklendi."}catch(e){$("st").textContent="Yorumlar alınamadı: "+((e&&e.message)||e)}}
 async function process(urls){
  let n=0;
  for(const [i,u] of urls.entries()){
@@ -142,7 +199,7 @@ async function process(urls){
     if(!x.title||books.some(y=>y.title.toLowerCase()===x.title.toLowerCase()))continue;
     const b={id:"b"+Math.random().toString(36).slice(2,9),title:x.title,author:x.author||"",publisher:x.publisher||"",guess:!!x.guess};
     books.push(b);n++;save();render();
-    enrich(b).then(()=>{save();render()});
+    enq(b);
    }
   }catch(e){$("st").textContent="Hata: "+e.message;return}
  }
@@ -181,82 +238,4 @@ async function coverPhoto(id,side){
   try{
    try{await C.requestPermissions({permissions:["camera"]})}catch(e){}
    const p=await C.getPhoto({source:"PROMPT",resultType:"dataUrl",quality:80,promptLabelHeader:"Kapak fotoğrafı",promptLabelPhoto:"Galeriden seç",promptLabelPicture:"Fotoğraf çek"});
-   return setCover(id,side,p.dataUrl);
-  }catch(e){
-   const m=String((e&&e.message)||e);
-   if(/cancel|iptal/i.test(m))return;
-   $("st").textContent="Kamera açılamadı ("+m+"). Alternatif butonu dene.";
-  }
- }
- $("alt2").style.display="block";
-}
-$("list").onclick=e=>{const t=e.target.closest("button[data-id]");if(t)return coverPhoto(t.dataset.id,t.dataset.side);const d=e.target.closest(".d");if(d)d.classList.toggle("open")};
-$("fc2").onchange=async e=>{const f=e.target.files[0];e.target.value="";$("alt2").style.display="none";if(f&&pending)setCover(pending.id,pending.side,await toDataUrl(URL.createObjectURL(f)))};
-$("fill").onclick=async()=>{
- const todo=books.filter(b=>!b.desc||!b.front);let i=0;
- for(const b of todo){i++;$("st").textContent=`Bilgiler tamamlanıyor ${i}/${todo.length}…`;await enrich(b);save();render()}
- $("st").textContent="Bilgiler tamamlandı.";
-};
-async function shareFile(name,b64){
- const F=P("Filesystem"),S=P("Share");
- if(!F||!S)throw new Error("Paylaşma eklentisi yok (uygulamayı güncelle).");
- const r=await F.writeFile({path:name,data:b64,directory:"CACHE"});
- await S.share({title:name,url:r.uri,dialogTitle:"Kaydet veya paylaş"});
-}
-function loadXlsx(){return new Promise((ok,no)=>{if(window.XLSX)return ok();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";s.onload=ok;s.onerror=()=>no(new Error("Excel kütüphanesi yüklenemedi (internet?)"));document.head.appendChild(s)})}
-$("xl").onclick=async()=>{
- if(!books.length)return $("st").textContent="Liste boş.";
- try{await loadXlsx();
-  const rows=[["Kitap","Yazar","Yayınevi","Kısa bilgi","Bilgi kaynağı"],...books.map(b=>[b.title,b.author,b.publisher,b.desc||"",b.descSrc||""])];
-  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:36},{wch:24},{wch:22},{wch:80},{wch:18}];
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Kitaplık");
-  await shareFile("kitappla.xlsx",XLSX.write(wb,{bookType:"xlsx",type:"base64"}));
- }catch(e){$("st").textContent="Excel hatası: "+((e&&e.message)||e)}
-};
-function pdfPages(){
- const W=1240,H=1754,M=80,pages=[];let c,x,y;
- const np=()=>{c=document.createElement("canvas");c.width=W;c.height=H;x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,W,H);y=M;pages.push(c)};
- const wrap=(t,f,w)=>{x.font=f;const out=[];let line="";for(const word of String(t||"").split(/\s+/)){const tt=line?line+" "+word:word;if(x.measureText(tt).width>w&&line){out.push(line);line=word}else line=tt}if(line)out.push(line);return out};
- const draw=(ls,f,col,lh)=>{x.font=f;x.fillStyle=col;ls.forEach(l=>{y+=lh;x.fillText(l,M,y)})};
- np();x.fillStyle="#b5472b";x.font="bold 54px sans-serif";x.fillText("Kitaplığım",M,y+40);y+=100;
- books.forEach((b,i)=>{
-  const fw=W-2*M,tl=wrap((i+1)+". "+b.title,"bold 34px sans-serif",fw);
-  const al=wrap([b.author,b.publisher].filter(Boolean).join(" · "),"28px sans-serif",fw);
-  const dl=wrap(b.desc,"26px sans-serif",fw);
-  if(y+tl.length*44+al.length*38+dl.length*34+50>H-M)np();
-  draw(tl,"bold 34px sans-serif","#000",44);draw(al,"28px sans-serif","#555",38);draw(dl,"26px sans-serif","#222",34);y+=50;
- });
- return pages.map(p=>p.toDataURL("image/jpeg",.9).split(",")[1]);
-}
-function makePdf(jpgs){
- const enc=new TextEncoder(),parts=[],offs=[];let len=0;
- const add=d=>{const u=typeof d==="string"?enc.encode(d):d;parts.push(u);len+=u.length};
- const obj=(n,fn)=>{offs[n]=len;add(n+" 0 obj\n");fn();add("\nendobj\n")};
- const N=jpgs.length;add("%PDF-1.4\n");
- obj(1,()=>add("<< /Type /Catalog /Pages 2 0 R >>"));
- obj(2,()=>add("<< /Type /Pages /Count "+N+" /Kids ["+jpgs.map((_,i)=>(3+3*i)+" 0 R").join(" ")+"] >>"));
- jpgs.forEach((j,i)=>{
-  const bin=Uint8Array.from(atob(j),ch=>ch.charCodeAt(0)),cs="q 595 0 0 842 0 0 cm /Im0 Do Q";
-  obj(3+3*i,()=>add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 "+(5+3*i)+" 0 R >> >> /Contents "+(4+3*i)+" 0 R >>"));
-  obj(4+3*i,()=>add("<< /Length "+cs.length+" >>\nstream\n"+cs+"\nendstream"));
-  obj(5+3*i,()=>{add("<< /Type /XObject /Subtype /Image /Width 1240 /Height 1754 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+bin.length+" >>\nstream\n");add(bin);add("\nendstream")});
- });
- const xr=len,total=3+3*N;
- add("xref\n0 "+total+"\n0000000000 65535 f \n");
- for(let n=1;n<total;n++)add(String(offs[n]).padStart(10,"0")+" 00000 n \n");
- add("trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xr+"\n%%EOF");
- const all=new Uint8Array(len);let p=0;for(const u of parts){all.set(u,p);p+=u.length}
- let s="";for(let i=0;i<all.length;i+=0x8000)s+=String.fromCharCode.apply(null,all.subarray(i,i+0x8000));
- return btoa(s);
-}
-$("pdf").onclick=async()=>{
- if(!books.length)return $("st").textContent="Liste boş.";
- try{$("st").textContent="PDF hazırlanıyor…";await shareFile("kitappla.pdf",makePdf(pdfPages()));$("st").textContent=""}
- catch(e){$("st").textContent="PDF hatası: "+((e&&e.message)||e)}
-};
-$("cfg").onclick=()=>{const s=$("set");s.style.display=s.style.display==="block"?"none":"block";$("key").value=localStorage.getItem("kitappla_key")||""};
-$("ksave").onclick=()=>{localStorage.setItem("kitappla_key",$("key").value.trim());$("set").style.display="none";$("st").textContent="Anahtar kaydedildi."};
-$("q").oninput=render;
-if(!localStorage.getItem("kitappla_key"))$("st").textContent="Başlamak için sağ üstteki ayarlar simgesinden Gemini API anahtarını gir.";
-render();
-</script></body></html>
+   return setCover(id,side,p
