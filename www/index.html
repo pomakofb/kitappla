@@ -231,4 +231,94 @@ $("cam").onclick=async()=>{
  $("alt").style.display="block";
 };
 $("fc").onchange=async e=>{$("alt").style.display="none";process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
-$("fb").onchange=async e=>{process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.create
+$("fb").onchange=async e=>{process(await Promise.all([...e.target.files].map(f=>toDataUrl(URL.createObjectURL(f)))))};
+let pending=null;
+async function setCover(id,side,url){
+ const b=books.find(x=>x.id===id);if(!b)return;
+ b[side==="f"?"fimg":"bimg"]="data:image/jpeg;base64,"+await shrink(url,360,.75);save();render();
+}
+async function coverPhoto(id,side){
+ pending={id,side};const C=P("Camera");
+ if(C){
+  try{
+   try{await C.requestPermissions({permissions:["camera"]})}catch(e){}
+   const p=await C.getPhoto({source:"PROMPT",resultType:"dataUrl",quality:80,promptLabelHeader:"Kapak fotoğrafı",promptLabelPhoto:"Galeriden seç",promptLabelPicture:"Fotoğraf çek"});
+   return setCover(id,side,p.dataUrl);
+  }catch(e){
+   const m=String((e&&e.message)||e);
+   if(/cancel|iptal/i.test(m))return;
+   $("st").textContent="Kamera açılamadı ("+m+"). Alternatif butonu dene.";
+  }
+ }
+ $("alt2").style.display="block";
+}
+$("list").onclick=e=>{const rv=e.target.closest("button[data-rev]");if(rv){const b=books.find(x=>x.id===rv.dataset.rev);if(b)getRev(b);return}const t=e.target.closest("button[data-id]");if(t)return coverPhoto(t.dataset.id,t.dataset.side);const d=e.target.closest(".d");if(d)d.classList.toggle("open")};
+$("fc2").onchange=async e=>{const f=e.target.files[0];e.target.value="";$("alt2").style.display="none";if(f&&pending)setCover(pending.id,pending.side,await toDataUrl(URL.createObjectURL(f)))};
+$("fill").onclick=async()=>{
+ const todo=books.filter(b=>!b.desc||!b.front);
+ if(!todo.length)return $("st").textContent="Tüm kitapların bilgisi tam.";
+ let ok=0,last="",i=0;
+ for(const b of todo){i++;$("st").textContent=`Bilgiler tamamlanıyor ${i}/${todo.length}…`;await enrich(b);if(b.desc)ok++;if(b.err)last=b.err;save();render();await sleep(1200)}
+ $("st").textContent=`${ok}/${todo.length} kitabın bilgisi tamamlandı.`+(ok<todo.length&&last?" Son hata: "+last.trim():"");
+};
+async function shareFile(name,b64){
+ const F=P("Filesystem"),S=P("Share");
+ if(!F||!S)throw new Error("Paylaşma eklentisi yok (uygulamayı güncelle).");
+ const r=await F.writeFile({path:name,data:b64,directory:"CACHE"});
+ await S.share({title:name,url:r.uri,dialogTitle:"Kaydet veya paylaş"});
+}
+function loadXlsx(){return new Promise((ok,no)=>{if(window.XLSX)return ok();const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";s.onload=ok;s.onerror=()=>no(new Error("Excel kütüphanesi yüklenemedi (internet?)"));document.head.appendChild(s)})}
+$("xl").onclick=async()=>{
+ if(!books.length)return $("st").textContent="Liste boş.";
+ try{await loadXlsx();
+  const rows=[["Kitap","Yazar","Yayınevi","Kısa bilgi","Bilgi kaynağı","Okur yorumları (1000Kitap)"],...books.map(b=>[b.title,b.author,b.publisher,b.desc||"",b.descSrc||"",b.rev?b.rev.t:""])];
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:36},{wch:24},{wch:22},{wch:80},{wch:18},{wch:80}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Kitaplık");
+  await shareFile("kitappla.xlsx",XLSX.write(wb,{bookType:"xlsx",type:"base64"}));
+ }catch(e){$("st").textContent="Excel hatası: "+((e&&e.message)||e)}
+};
+function pdfPages(){
+ const W=1240,H=1754,M=80,pages=[];let c,x,y;
+ const np=()=>{c=document.createElement("canvas");c.width=W;c.height=H;x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,W,H);y=M;pages.push(c)};
+ const wrap=(t,f,w)=>{x.font=f;const out=[];let line="";for(const word of String(t||"").split(/\s+/)){const tt=line?line+" "+word:word;if(x.measureText(tt).width>w&&line){out.push(line);line=word}else line=tt}if(line)out.push(line);return out};
+ const draw=(ls,f,col,lh)=>{x.font=f;x.fillStyle=col;ls.forEach(l=>{y+=lh;x.fillText(l,M,y)})};
+ np();x.fillStyle="#b5472b";x.font="bold 54px sans-serif";x.fillText("Kitaplığım",M,y+40);y+=100;
+ books.forEach((b,i)=>{
+  const fw=W-2*M,tl=wrap((i+1)+". "+b.title,"bold 34px sans-serif",fw);
+  const al=wrap([b.author,b.publisher].filter(Boolean).join(" · "),"28px sans-serif",fw);
+  const dl=wrap(b.desc,"26px sans-serif",fw),rl=b.rev?wrap("Okur yorumları: "+b.rev.t.replace(/\s*\n\s*/g," "),"24px sans-serif",fw):[];
+  if(y+tl.length*44+al.length*38+dl.length*34+rl.length*32+50>H-M)np();
+  draw(tl,"bold 34px sans-serif","#000",44);draw(al,"28px sans-serif","#555",38);draw(dl,"26px sans-serif","#222",34);draw(rl,"24px sans-serif","#7a3b1f",32);y+=50;
+ });
+ return pages.map(p=>p.toDataURL("image/jpeg",.9).split(",")[1]);
+}
+function makePdf(jpgs){
+ const enc=new TextEncoder(),parts=[],offs=[];let len=0;
+ const add=d=>{const u=typeof d==="string"?enc.encode(d):d;parts.push(u);len+=u.length};
+ const obj=(n,fn)=>{offs[n]=len;add(n+" 0 obj\n");fn();add("\nendobj\n")};
+ const N=jpgs.length;add("%PDF-1.4\n");
+ obj(1,()=>add("<< /Type /Catalog /Pages 2 0 R >>"));
+ obj(2,()=>add("<< /Type /Pages /Count "+N+" /Kids ["+jpgs.map((_,i)=>(3+3*i)+" 0 R").join(" ")+"] >>"));
+ jpgs.forEach((j,i)=>{
+  const bin=Uint8Array.from(atob(j),ch=>ch.charCodeAt(0)),cs="q 595 0 0 842 0 0 cm /Im0 Do Q";
+  obj(3+3*i,()=>add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 "+(5+3*i)+" 0 R >> >> /Contents "+(4+3*i)+" 0 R >>"));
+  obj(4+3*i,()=>add("<< /Length "+cs.length+" >>\nstream\n"+cs+"\nendstream"));
+  obj(5+3*i,()=>{add("<< /Type /XObject /Subtype /Image /Width 1240 /Height 1754 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+bin.length+" >>\nstream\n");add(bin);add("\nendstream")});
+ });
+ const xr=len,total=3+3*N;
+ add("xref\n0 "+total+"\n0000000000 65535 f \n");
+ for(let n=1;n<total;n++)add(String(offs[n]).padStart(10,"0")+" 00000 n \n");
+ add("trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xr+"\n%%EOF");
+ const all=new Uint8Array(len);let p=0;for(const u of parts){all.set(u,p);p+=u.length}
+ let s="";for(let i=0;i<all.length;i+=0x8000)s+=String.fromCharCode.apply(null,all.subarray(i,i+0x8000));
+ return btoa(s);
+}
+$("pdf").onclick=async()=>{
+ if(!books.length)return $("st").textContent="Liste boş.";
+ try{$("st").textContent="PDF hazırlanıyor…";await shareFile("kitappla.pdf",makePdf(pdfPages()));$("st").textContent=""}
+ catch(e){$("st").textContent="PDF hatası: "+((e&&e.message)||e)}
+};
+$("q").oninput=render;
+if(!localStorage.getItem("kitappla_key"))$("st").textContent="Başlamak için sağ üstteki ayarlar simgesinden Gemini API anahtarını gir.";
+render();
+</script></body></html>
