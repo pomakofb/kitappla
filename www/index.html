@@ -49,6 +49,12 @@ button{font:inherit;cursor:pointer;border:0}
 .tabs{display:flex;gap:6px;padding:4px;border-radius:999px;background:color-mix(in srgb,var(--mu) 14%,transparent);margin:12px 0 4px}
 .tab{flex:1;padding:9px 12px;border-radius:999px;background:transparent;color:var(--mu);font-weight:700;font-size:14px}.tab.on{background:var(--sf);color:var(--tx);box-shadow:var(--sh)}
 .heart{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:50%;background:transparent;color:var(--mu);display:grid;place-items:center;padding:0}.heart .ic{width:22px;height:22px}.heart.on{color:#e11d48}.heart.on .ic{fill:currentColor}
+.tag{cursor:pointer}.tag.no{background:transparent;border:1px dashed var(--bd);color:var(--mu)}
+#ed{display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.5);align-items:flex-end;justify-content:center}
+.edc{width:100%;max-width:640px;max-height:92vh;overflow:auto;background:var(--sf);border-radius:22px 22px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+.edc b{font-size:17px}.edc label{display:block;font-size:12px;font-weight:600;color:var(--mu);margin:12px 0 4px}
+.edc textarea.f{min-height:96px;resize:vertical}
+.eda{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
 .empty{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:56px 24px;color:var(--mu)}.empty b{color:var(--tx);font-size:17px}.eb{font-size:46px}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute"><defs>
@@ -79,9 +85,17 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 10</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 11</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
+<div id="ed"><div class="edc"><b>Kitabı düzenle</b>
+<label>Kitap adı</label><input class="f" id="e-t">
+<label>Yazar</label><input class="f" id="e-a">
+<label>Yayınevi</label><input class="f" id="e-p">
+<label id="e-okl" style="display:none;font-size:13px;font-weight:500;color:var(--tx)"><input type="checkbox" id="e-ok" style="width:auto;margin-right:8px">Yayınevi doğru, "tahmini" etiketini kaldır</label>
+<label>Kısa bilgi</label><textarea class="f" id="e-d"></textarea>
+<div class="eda"><button id="e-save" style="padding:11px 20px;border-radius:12px;background:var(--ac);color:#fff;font-weight:700">Kaydet</button><button class="mini ghost" id="e-x" style="padding:11px 14px">Vazgeç</button><button class="mini ghost" id="e-del" style="padding:11px 14px;margin-left:auto">Sil</button></div>
+</div></div>
 <script>
 
 const $=id=>document.getElementById(id);
@@ -134,13 +148,13 @@ function render(){
   const k=b.title+" "+b.author,h=hue(b.title),fr=b.fimg||b.front;
   const front=fr?`<img class="cv" src="${esc(fr)}" alt="">`:`<div class="cv ph" style="background:linear-gradient(145deg,hsl(${h},50%,46%),hsl(${(h+40)%360},55%,28%))">${esc(b.title)}</div>`;
   const back=b.bimg?`<img class="cv sm" src="${esc(b.bimg)}" alt="">`:"";
-  const tag=b.publisher?`<span class="tag">${esc(b.publisher)}${b.guess?" · tahmini":""}</span>`:"";
+  const tag=`<span class="tag${b.publisher?"":" no"}" data-edit="${b.id}" data-focus="p">${b.publisher?esc(b.publisher)+(b.guess?" · tahmini":""):"+ Yayınevi ekle"}</span>`;
   const d=b.desc?`<p class="d">${esc(b.desc)}</p><div class="src">${esc(b.descSrc)}</div>`:"";
   const rev=b.rev?`<div class="rev"><div class="rh">1000Kitap okur yorumları</div><div class="rt">${esc(b.rev.t)}</div><a target="_blank" href="${esc(b.rev.url)}">Sayfayı aç</a></div>`:"";
   return `<article class="book"><button class="heart${b.fav?" on":""}" data-fav="${b.id}" aria-label="Favori"><svg class="ic"><use href="#i-heart"/></svg></button><div class="cvs">${front}${back}</div><div class="bd">
   <div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)||"Yazar bilinmiyor"}</div>${tag}${d}${rev}
   <div class="acts"><button class="mini" data-id="${b.id}" data-side="f"><svg class="ic"><use href="#i-cam"/></svg>Ön kapak</button><button class="mini" data-id="${b.id}" data-side="b"><svg class="ic"><use href="#i-cam"/></svg>Arka kapak</button>
-  <a class="mini ghost" target="_blank" href="${gi(k+" kitap kapağı")}">Kapak ara</a><button class="mini ghost" data-rev="${b.id}">${b.rev?"Yorumları yenile":"1000Kitap yorumları"}</button></div></div></article>`}).join("");
+  <a class="mini ghost" target="_blank" href="${gi(k+" kitap kapağı")}">Kapak ara</a><button class="mini ghost" data-rev="${b.id}">${b.rev?"Yorumları yenile":"1000Kitap yorumları"}</button><button class="mini ghost" data-edit="${b.id}">Düzenle</button></div></div></article>`}).join("");
 }
 function shrink(src,max=1600,q=.85){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const s=Math.min(1,max/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",q).split(",")[1])};i.onerror=no;i.src=src})}
 const toDataUrl=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
@@ -315,8 +329,31 @@ async function coverPhoto(id,side){
  }
  $("alt2").style.display="block";
 }
-$("list").onclick=e=>{const fv=e.target.closest("button[data-fav]");if(fv){const b=books.find(x=>x.id===fv.dataset.fav);if(b){b.fav=!b.fav;save();render()}return}const rv=e.target.closest("button[data-rev]");if(rv){const b=books.find(x=>x.id===rv.dataset.rev);if(b)getRev(b);return}const t=e.target.closest("button[data-id]");if(t)return coverPhoto(t.dataset.id,t.dataset.side);const d=e.target.closest(".d");if(d)d.classList.toggle("open")};
+$("list").onclick=e=>{const ed=e.target.closest("[data-edit]");if(ed){openEdit(ed.dataset.edit,ed.dataset.focus);return}const fv=e.target.closest("button[data-fav]");if(fv){const b=books.find(x=>x.id===fv.dataset.fav);if(b){b.fav=!b.fav;save();render()}return}const rv=e.target.closest("button[data-rev]");if(rv){const b=books.find(x=>x.id===rv.dataset.rev);if(b)getRev(b);return}const t=e.target.closest("button[data-id]");if(t)return coverPhoto(t.dataset.id,t.dataset.side);const d=e.target.closest(".d");if(d)d.classList.toggle("open")};
 $("fc2").onchange=async e=>{const f=e.target.files[0];e.target.value="";$("alt2").style.display="none";if(f&&pending)setCover(pending.id,pending.side,await toDataUrl(URL.createObjectURL(f)))};
+let editId=null,delArm=false;
+function openEdit(id,f){
+ const b=books.find(x=>x.id===id);if(!b)return;editId=id;delArm=false;
+ $("e-t").value=b.title;$("e-a").value=b.author||"";$("e-p").value=b.publisher||"";$("e-d").value=b.desc||"";
+ $("e-ok").checked=false;$("e-okl").style.display=b.guess&&b.publisher?"block":"none";$("e-del").textContent="Sil";
+ $("ed").style.display="flex";setTimeout(()=>{(f==="p"?$("e-p"):$("e-t")).focus()},60);
+}
+const closeEdit=()=>{$("ed").style.display="none"};
+$("e-x").onclick=closeEdit;
+$("ed").onclick=e=>{if(e.target.id==="ed")closeEdit()};
+$("e-save").onclick=()=>{
+ const b=books.find(x=>x.id===editId);if(!b)return closeEdit();
+ const t=$("e-t").value.trim();if(!t){$("e-t").focus();return}
+ const p=$("e-p").value.trim(),d=$("e-d").value.trim();
+ if(p!==(b.publisher||"")||$("e-ok").checked)b.guess=false;
+ b.title=t;b.author=$("e-a").value.trim();b.publisher=p;
+ if(d!==(b.desc||"")){b.desc=d;b.descSrc=d?"elle girildi":""}
+ save();render();closeEdit();$("st").textContent="Kitap güncellendi.";
+};
+$("e-del").onclick=()=>{
+ if(!delArm){delArm=true;$("e-del").textContent="Emin misin? Sil";return}
+ books=books.filter(x=>x.id!==editId);save();render();closeEdit();$("st").textContent="Kitap silindi.";
+};
 $("fill").onclick=async()=>{
  const todo=books.filter(b=>!b.desc||!b.front);
  if(!todo.length)return $("st").textContent="Tüm kitapların bilgisi tam.";
