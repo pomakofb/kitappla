@@ -85,7 +85,7 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 12</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 13</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <div id="ed"><div class="edc"><b>Kitabı düzenle</b>
@@ -145,8 +145,8 @@ function render(){
  if(tab==="fav"&&!favs){$("list").innerHTML='<div class="empty"><div class="eb">♡</div><b>Henüz favori kitabın yok</b><span>Kitap kartındaki kalbe dokunarak favorilere ekle.</span></div>';return}
  if(!books.length){$("list").innerHTML='<div class="empty"><div class="eb">📚</div><b>Kitaplığın henüz boş</b><span>Kitap sırtlarının fotoğrafını ekleyerek başla.</span></div>';return}
  $("list").innerHTML=list.map(b=>{
-  const k=b.title+" "+b.author,h=hue(b.title),fr=b.fimg||b.front;
-  const front=fr?`<img class="cv" src="${esc(fr)}" alt="">`:`<div class="cv ph" style="background:linear-gradient(145deg,hsl(${h},50%,46%),hsl(${(h+40)%360},55%,28%))">${esc(b.title)}</div>`;
+  const k=b.title+" "+b.author,h=hue(b.title),fr=b.fimg||b.front,bg=`linear-gradient(145deg,hsl(${h},50%,46%),hsl(${(h+40)%360},55%,28%))`;
+  const front=fr?`<img class="cv" data-t="${esc(b.title)}" data-bg="${bg}" src="${esc(fr)}" alt="">`:`<div class="cv ph" style="background:${bg}">${esc(b.title)}</div>`;
   const back=b.bimg?`<img class="cv sm" src="${esc(b.bimg)}" alt="">`:"";
   const tag=`<span class="tag${b.publisher?"":" no"}" data-edit="${b.id}" data-focus="p">${b.publisher?esc(b.publisher)+(b.guess?" · tahmini":""):"+ Yayınevi ekle"}</span>`;
   const d=b.desc?`<p class="d">${esc(b.desc)}</p><div class="src">${esc(b.descSrc)}</div>`:"";
@@ -213,30 +213,45 @@ function score(v,b){
  if(b.author)tr2(b.author).split(" ").forEach(w=>{if(w.length>2&&va.includes(w))s++});
  return h?h*3+s*2+(v.description?1:0)+(v.imageLinks?1:0):0;
 }
-async function gbooks(b){
- const qs=["intitle:"+b.title+(b.author?" inauthor:"+b.author:""),b.title+" "+(b.author||"")];
+const cleanT=t=>String(t||"").replace(/\b(cilt|vol\.?|volume|c\.)\s*[ivx\d]+\b/ig,"").replace(/\(.*?\)/g,"").split(/[:–—]/)[0].replace(/\s+/g," ").trim();
+const imgOk=u=>new Promise(r=>{const i=new Image(),t=setTimeout(()=>{i.src="";r(false)},7000);i.onload=()=>{clearTimeout(t);r(i.naturalWidth>20)};i.onerror=()=>{clearTimeout(t);r(false)};i.src=u});
+async function gbooksList(b){
+ const T=b.title,A=b.author||"",C=cleanT(T)||T;
+ const qs=[...new Set(["intitle:"+T+(A?" inauthor:"+A:""),"intitle:"+C+(A?" inauthor:"+A:""),C+" "+A,C])].filter(q=>q.trim());
+ const out=[],seen=new Set();
  for(const q of qs){
-  for(let t=0;t<2;t++){
-   const r=await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=8&q="+encodeURIComponent(q));
-   if(r.status===429){await sleep(1500);continue}
-   if(!r.ok)throw new Error("Google Books "+r.status);
-   const items=((await r.json()).items||[]).map(i=>i.volumeInfo).filter(Boolean).sort((x,y)=>score(y,b)-score(x,b));
-   if(items.length&&score(items[0],b)>=3)return items[0];
-   break;
+  let r;
+  for(let t=0;t<2;t++){r=await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=10&q="+encodeURIComponent(q));if(r.status!==429)break;await sleep(1500)}
+  if(!r||!r.ok)continue;
+  for(const v of ((await r.json()).items||[]).map(i=>i.volumeInfo).filter(Boolean)){
+   const k=(v.title||"")+"|"+(v.publisher||"")+"|"+((v.industryIdentifiers||[])[0]||{}).identifier;
+   if(seen.has(k))continue;
+   const sc=Math.max(score(v,b),score(v,{title:C,author:A}));
+   if(sc>=3){seen.add(k);out.push({v,sc})}
   }
+  out.sort((x,y)=>y.sc-x.sc);
+  if(out.some(o=>o.v.imageLinks)&&out.some(o=>o.v.description))break;
  }
- return null;
+ return out.map(o=>o.v);
 }
 async function webInfo(b){
- if(!b.front||!b.desc||!b.publisher){
-  try{const v=await gbooks(b);
-   if(v){const im=v.imageLinks;if(im&&!b.front)b.front=(im.thumbnail||im.smallThumbnail).replace("http://","https://");
-    if(!b.publisher&&v.publisher){b.publisher=v.publisher;b.guess=true}
-    if(!b.desc&&v.description){b.desc=v.description.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,380);b.descSrc="Google Books"}}}
-  catch(e){}
+ if(b.front&&b.desc&&b.publisher)return;
+ let list=[];try{list=await gbooksList(b)}catch(e){}
+ for(const v of list){
+  if(!b.front&&v.imageLinks){const u=(v.imageLinks.thumbnail||v.imageLinks.smallThumbnail||"").replace("http://","https://").replace("&edge=curl","");if(u)b.front=u}
+  if(!b.publisher&&v.publisher){b.publisher=v.publisher;b.guess=true}
+  if(!b.desc&&v.description){b.desc=v.description.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,380);b.descSrc="Google Books"}
  }
- if(!b.front){try{const j=await (await fetch("https://openlibrary.org/search.json?limit=1&fields=cover_i&title="+encodeURIComponent(b.title)+"&author="+encodeURIComponent(b.author||""))).json();
-  const c=j.docs&&j.docs[0]&&j.docs[0].cover_i;if(c)b.front="https://covers.openlibrary.org/b/id/"+c+"-M.jpg"}catch(e){}}
+ if(!b.front){
+  const ids=[...new Set(list.flatMap(v=>(v.industryIdentifiers||[]).map(i=>i.identifier)))].slice(0,3);
+  for(const i of ids){const u="https://covers.openlibrary.org/b/isbn/"+i+"-M.jpg?default=false";if(await imgOk(u)){b.front=u;break}}
+ }
+ if(!b.front){
+  try{const T=b.title,A=b.author||"",C=cleanT(T)||T;
+   const j=await (await fetch("https://openlibrary.org/search.json?limit=6&fields=title,author_name,cover_i&title="+encodeURIComponent(C)+(A?"&author="+encodeURIComponent(A):""))).json();
+   const d=(j.docs||[]).filter(x=>x.cover_i).map(x=>({x,s:score({title:x.title,authors:x.author_name||[]},{title:C,author:A})})).sort((p,q)=>q.s-p.s)[0];
+   if(d&&d.s>=3)b.front="https://covers.openlibrary.org/b/id/"+d.x.cover_i+"-M.jpg"}catch(e){}
+ }
 }
 async function aiDescs(g){
  const txt=g.map((b,i)=>(i+1)+". "+b.title+(b.author?" — "+b.author:"")).join("\n");
@@ -258,7 +273,7 @@ async function enrichAll(list){
   let gd=0;
   await pool(groups,2,async g=>{try{await aiDescs(g)}catch(e){gerr=(e&&e.message)||String(e)}gd++;$("st").textContent=`Özetler hazırlanıyor ${gd}/${groups.length}…`;rdr()});
   save();render();
-  return{ok:list.filter(b=>b.desc).length,total:list.length,err:gerr};
+  return{ok:list.filter(b=>b.desc).length,cv:list.filter(b=>b.front||b.fimg).length,total:list.length,err:gerr};
  }finally{enriching=false}
 }
 const http=async url=>{
@@ -303,7 +318,7 @@ async function process(urls){
  }
  let r={ok:0,total:0};
  if(added.length)r=await enrichAll(added);
- $("st").textContent=found?`${n} yeni kitap eklendi (${found} sırt okundu)`+(n?`, bilgisi tamamlanan: ${r.ok}/${n}`:"")+`. Toplam: ${books.length}`+(lastModel?" · "+lastModel:""):"Fotoğrafta okunabilen kitap sırtı bulunamadı. Daha yakından, düz ve aydınlık çekmeyi dene.";
+ $("st").textContent=found?`${n} yeni kitap eklendi (${found} sırt okundu)`+(n?`, bilgi ${r.ok}/${n}, kapak ${r.cv}/${n}`:"")+`. Toplam: ${books.length}`+(lastModel?" · "+lastModel:""):"Fotoğrafta okunabilen kitap sırtı bulunamadı. Daha yakından, düz ve aydınlık çekmeyi dene.";
 }
 $("gal").onclick=async()=>{
  const C=P("Camera");if(!C)return $("fb").click();
@@ -347,6 +362,7 @@ async function coverPhoto(id,side){
  }
  $("alt2").style.display="block";
 }
+$("list").addEventListener("error",ev=>{const i=ev.target;if(!i||i.tagName!=="IMG"||!i.classList.contains("cv")||i.classList.contains("sm"))return;const d=document.createElement("div");d.className="cv ph";d.style.background=i.dataset.bg;d.textContent=i.dataset.t;i.replaceWith(d)},true);
 $("list").onclick=e=>{const ed=e.target.closest("[data-edit]");if(ed){openEdit(ed.dataset.edit,ed.dataset.focus);return}const fv=e.target.closest("button[data-fav]");if(fv){const b=books.find(x=>x.id===fv.dataset.fav);if(b){b.fav=!b.fav;save();render()}return}const rv=e.target.closest("button[data-rev]");if(rv){const b=books.find(x=>x.id===rv.dataset.rev);if(b)getRev(b);return}const t=e.target.closest("button[data-id]");if(t)return coverPhoto(t.dataset.id,t.dataset.side);const d=e.target.closest(".d");if(d)d.classList.toggle("open")};
 $("fc2").onchange=async e=>{const f=e.target.files[0];e.target.value="";$("alt2").style.display="none";if(f&&pending)setCover(pending.id,pending.side,await toDataUrl(URL.createObjectURL(f)))};
 let editId=null,delArm=false;
@@ -377,7 +393,7 @@ $("fill").onclick=async()=>{
  if(!todo.length)return $("st").textContent="Tüm kitapların bilgisi tam.";
  const t0=Date.now(),r=await enrichAll(todo);
  if(r.busy)return $("st").textContent="Bilgiler zaten tamamlanıyor, biraz bekle.";
- $("st").textContent=`${r.ok}/${r.total} kitabın bilgisi tamamlandı (${Math.round((Date.now()-t0)/1000)} sn).`+(r.ok<r.total&&r.err?" Son hata: "+r.err:"");
+ $("st").textContent=`${r.ok}/${r.total} kitabın bilgisi, ${r.cv}/${r.total} kitabın kapağı tamamlandı (${Math.round((Date.now()-t0)/1000)} sn).`+(r.ok<r.total&&r.err?" Son hata: "+r.err:"");
 };
 const exportList=()=>tab==="fav"?books.filter(b=>b.fav):books;
 async function shareFile(name,b64){
