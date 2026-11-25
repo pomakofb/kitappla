@@ -85,7 +85,7 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 11</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 12</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <div id="ed"><div class="edc"><b>Kitabı düzenle</b>
@@ -227,23 +227,40 @@ async function gbooks(b){
  }
  return null;
 }
-async function enrich(b){
- b.err="";
+async function webInfo(b){
  if(!b.front||!b.desc||!b.publisher){
   try{const v=await gbooks(b);
    if(v){const im=v.imageLinks;if(im&&!b.front)b.front=(im.thumbnail||im.smallThumbnail).replace("http://","https://");
     if(!b.publisher&&v.publisher){b.publisher=v.publisher;b.guess=true}
     if(!b.desc&&v.description){b.desc=v.description.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,380);b.descSrc="Google Books"}}}
-  catch(e){b.err="Google Books: "+e.message}
+  catch(e){}
  }
  if(!b.front){try{const j=await (await fetch("https://openlibrary.org/search.json?limit=1&fields=cover_i&title="+encodeURIComponent(b.title)+"&author="+encodeURIComponent(b.author||""))).json();
   const c=j.docs&&j.docs[0]&&j.docs[0].cover_i;if(c)b.front="https://covers.openlibrary.org/b/id/"+c+"-M.jpg"}catch(e){}}
- if(!b.desc){try{const t=await gemRetry([{text:'"'+b.title+'" ('+(b.author||"yazar bilinmiyor")+') kitabı için Türkçe, en fazla 2 cümlelik, tarafsız kısa bir içerik özeti yaz. Kitabı tanımıyorsan ayrıntı uydurma, sadece "Bu kitap hakkında bilgi bulunamadı." yaz. Sadece özeti yaz.'}],false);
-  if(t.trim()&&!/bilgi bulunamadı/i.test(t)){b.desc=t.trim().slice(0,380);b.descSrc="yapay zekâ özeti"}else b.err+=" Kitap tanınmadı."}catch(e){b.err+=" Gemini: "+e.message}}
- return !!b.desc;
 }
-let chain=Promise.resolve();
-const enq=b=>{chain=chain.then(async()=>{await enrich(b);save();render();await sleep(1200)}).catch(()=>{});return chain};
+async function aiDescs(g){
+ const txt=g.map((b,i)=>(i+1)+". "+b.title+(b.author?" — "+b.author:"")).join("\n");
+ const t=await gemRetry([{text:'Aşağıdaki kitapların her biri için Türkçe, en fazla 2 cümlelik, tarafsız bir içerik özeti yaz. Bir kitabı tanımıyorsan onun "d" alanını boş bırak, ayrıntı uydurma. Yalnızca JSON dizisi döndür: [{"n":1,"d":"..."}]\n\n'+txt}],true);
+ for(const o of parseList(t)){const b=g[(o.n|0)-1];if(b&&o.d&&String(o.d).trim()){b.desc=String(o.d).trim().slice(0,380);b.descSrc="yapay zekâ özeti"}}
+}
+async function pool(items,n,fn){let i=0;await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(i<items.length){const k=i++;try{await fn(items[k],k)}catch(e){}}}))}
+const rdr=(()=>{let t=0;return()=>{if(t)return;t=setTimeout(()=>{t=0;render()},400)}})();
+let enriching=false;
+async function enrichAll(list){
+ if(enriching)return{ok:0,total:list.length,busy:true};
+ enriching=true;
+ try{
+  let done=0,gerr="";
+  await pool(list,5,async b=>{await webInfo(b);done++;$("st").textContent=`Bilgiler aranıyor ${done}/${list.length}…`;rdr();if(done%10===0)save()});
+  save();render();
+  const need=list.filter(b=>!b.desc),groups=[];
+  for(let i=0;i<need.length;i+=8)groups.push(need.slice(i,i+8));
+  let gd=0;
+  await pool(groups,2,async g=>{try{await aiDescs(g)}catch(e){gerr=(e&&e.message)||String(e)}gd++;$("st").textContent=`Özetler hazırlanıyor ${gd}/${groups.length}…`;rdr()});
+  save();render();
+  return{ok:list.filter(b=>b.desc).length,total:list.length,err:gerr};
+ }finally{enriching=false}
+}
 const http=async url=>{
  const H=P("CapacitorHttp"),hd={"User-Agent":"Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"};
  if(H){const r=await H.get({url,headers:hd,responseType:"text"});if(r.status>=400)throw new Error("HTTP "+r.status);return typeof r.data==="string"?r.data:JSON.stringify(r.data)}
@@ -272,7 +289,7 @@ async function loadReviews(b){
 }
 async function getRev(b){try{await loadReviews(b);save();render();$("st").textContent="Yorumlar eklendi."}catch(e){$("st").textContent="Yorumlar alınamadı: "+((e&&e.message)||e)}}
 async function process(urls){
- let n=0,found=0;
+ let n=0,found=0;const added=[];
  for(const [i,u] of urls.entries()){
   $("st").textContent=`Fotoğraf ${i+1}/${urls.length} okunuyor…`;
   try{
@@ -280,12 +297,13 @@ async function process(urls){
    for(const x of list){
     if(!x.title||books.some(y=>y.title.toLowerCase()===x.title.toLowerCase()))continue;
     const b={id:"b"+Math.random().toString(36).slice(2,9),title:x.title,author:x.author||"",publisher:x.publisher||"",guess:!!x.guess};
-    books.push(b);n++;save();render();
-    enq(b);
+    books.push(b);added.push(b);n++;save();render();
    }
   }catch(e){$("st").textContent="Hata: "+e.message;return}
  }
- $("st").textContent=found?`${n} yeni kitap eklendi (${found} sırt okundu). Toplam: ${books.length}`+(lastModel?" · "+lastModel:""):"Fotoğrafta okunabilen kitap sırtı bulunamadı. Daha yakından, düz ve aydınlık çekmeyi dene.";
+ let r={ok:0,total:0};
+ if(added.length)r=await enrichAll(added);
+ $("st").textContent=found?`${n} yeni kitap eklendi (${found} sırt okundu)`+(n?`, bilgisi tamamlanan: ${r.ok}/${n}`:"")+`. Toplam: ${books.length}`+(lastModel?" · "+lastModel:""):"Fotoğrafta okunabilen kitap sırtı bulunamadı. Daha yakından, düz ve aydınlık çekmeyi dene.";
 }
 $("gal").onclick=async()=>{
  const C=P("Camera");if(!C)return $("fb").click();
@@ -357,9 +375,9 @@ $("e-del").onclick=()=>{
 $("fill").onclick=async()=>{
  const todo=books.filter(b=>!b.desc||!b.front);
  if(!todo.length)return $("st").textContent="Tüm kitapların bilgisi tam.";
- let ok=0,last="",i=0;
- for(const b of todo){i++;$("st").textContent=`Bilgiler tamamlanıyor ${i}/${todo.length}…`;await enrich(b);if(b.desc)ok++;if(b.err)last=b.err;save();render();await sleep(1200)}
- $("st").textContent=`${ok}/${todo.length} kitabın bilgisi tamamlandı.`+(ok<todo.length&&last?" Son hata: "+last.trim():"");
+ const t0=Date.now(),r=await enrichAll(todo);
+ if(r.busy)return $("st").textContent="Bilgiler zaten tamamlanıyor, biraz bekle.";
+ $("st").textContent=`${r.ok}/${r.total} kitabın bilgisi tamamlandı (${Math.round((Date.now()-t0)/1000)} sn).`+(r.ok<r.total&&r.err?" Son hata: "+r.err:"");
 };
 const exportList=()=>tab==="fav"?books.filter(b=>b.fav):books;
 async function shareFile(name,b64){
