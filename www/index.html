@@ -35,6 +35,7 @@ button{font:inherit;cursor:pointer;border:0}
 .cvs{display:flex;flex-direction:column;gap:8px;flex:none}
 .cv{width:76px;height:112px;border-radius:8px;object-fit:cover;box-shadow:0 4px 12px rgba(0,0,0,.2)}
 .cv.ph{display:flex;align-items:center;justify-content:center;text-align:center;padding:8px;color:#fff;font-size:11px;font-weight:700;line-height:1.25;border-left:4px solid rgba(255,255,255,.25)}
+.ab{font-size:10px;text-align:center;color:var(--mu);margin-top:-4px}
 .cv.sm{width:48px;height:70px;border-radius:6px;align-self:center}
 .bd{min-width:0;flex:1}
 .t{font-weight:700;font-size:16.5px;line-height:1.25;letter-spacing:-.01em}.a{color:var(--mu);font-size:14px;margin-top:2px}
@@ -85,7 +86,7 @@ button{font:inherit;cursor:pointer;border:0}
 <div class="tabs"><button class="tab on" id="t-all">Tümü</button><button class="tab" id="t-fav">Favoriler</button></div>
 <div id="cnt"></div>
 <div id="list"></div>
-<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 13</div>
+<div style="text-align:center;color:var(--mu);font-size:11px;margin-top:20px">Sürüm 15</div>
 <input type="file" id="fb" accept="image/*" multiple hidden>
 </main>
 <div id="ed"><div class="edc"><b>Kitabı düzenle</b>
@@ -93,6 +94,7 @@ button{font:inherit;cursor:pointer;border:0}
 <label>Yazar</label><input class="f" id="e-a">
 <label>Yayınevi</label><input class="f" id="e-p">
 <label id="e-okl" style="display:none;font-size:13px;font-weight:500;color:var(--tx)"><input type="checkbox" id="e-ok" style="width:auto;margin-right:8px">Yayınevi doğru, "tahmini" etiketini kaldır</label>
+<label>Sayfa sayısı (yaklaşık)</label><input class="f" id="e-n" type="number" inputmode="numeric" min="0">
 <label>Kısa bilgi</label><textarea class="f" id="e-d"></textarea>
 <div class="eda"><button id="e-save" style="padding:11px 20px;border-radius:12px;background:var(--ac);color:#fff;font-weight:700">Kaydet</button><button class="mini ghost" id="e-x" style="padding:11px 14px">Vazgeç</button><button class="mini ghost" id="e-del" style="padding:11px 14px;margin-left:auto">Sil</button></div>
 </div></div>
@@ -151,8 +153,8 @@ function render(){
   const tag=`<span class="tag${b.publisher?"":" no"}" data-edit="${b.id}" data-focus="p">${b.publisher?esc(b.publisher)+(b.guess?" · tahmini":""):"+ Yayınevi ekle"}</span>`;
   const d=b.desc?`<p class="d">${esc(b.desc)}</p><div class="src">${esc(b.descSrc)}</div>`:"";
   const rev=b.rev?`<div class="rev"><div class="rh">1000Kitap okur yorumları</div><div class="rt">${esc(b.rev.t)}</div><a target="_blank" href="${esc(b.rev.url)}">Sayfayı aç</a></div>`:"";
-  return `<article class="book"><button class="heart${b.fav?" on":""}" data-fav="${b.id}" aria-label="Favori"><svg class="ic"><use href="#i-heart"/></svg></button><div class="cvs">${front}${back}</div><div class="bd">
-  <div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)||"Yazar bilinmiyor"}</div>${tag}${d}${rev}
+  return `<article class="book"><button class="heart${b.fav?" on":""}" data-fav="${b.id}" aria-label="Favori"><svg class="ic"><use href="#i-heart"/></svg></button><div class="cvs">${front}${b.frontAlt&&!b.fimg&&b.front?'<div class="ab">başka baskı</div>':""}${back}</div><div class="bd">
+  <div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)||"Yazar bilinmiyor"}${b.pages?" · "+(b.pagesSrc==="elle girildi"?"":"≈")+b.pages+" sayfa":""}</div>${tag}${d}${rev}
   <div class="acts"><button class="mini" data-id="${b.id}" data-side="f"><svg class="ic"><use href="#i-cam"/></svg>Ön kapak</button><button class="mini" data-id="${b.id}" data-side="b"><svg class="ic"><use href="#i-cam"/></svg>Arka kapak</button>
   <a class="mini ghost" target="_blank" href="${gi(k+" kitap kapağı")}">Kapak ara</a><button class="mini ghost" data-rev="${b.id}">${b.rev?"Yorumları yenile":"1000Kitap yorumları"}</button><button class="mini ghost" data-edit="${b.id}">Düzenle</button></div></div></article>`}).join("");
 }
@@ -203,7 +205,7 @@ async function gem(parts,json){
  const e=new Error(code===429?(/Günlük/.test(last)?last:"Gemini kotası dolmuş görünüyor. Birkaç dakika bekleyip tekrar dene; sürerse Google AI Studio'dan kotayı kontrol et."):(last||"Gemini yanıt vermedi"));e.code=code;throw e;
 }
 async function gemRetry(parts,json){
- for(let i=0;;i++){try{return await gem(parts,json)}catch(e){if(i>=2||(e.code!==429&&e.code!==503)||/Günlük/.test(e.message))throw e;$("st").textContent="Gemini yoğun, "+8*(i+1)+" sn bekleniyor…";await sleep(8000*(i+1))}}
+ for(let i=0;;i++){try{return await gem(parts,json)}catch(e){if(i>=3||(e.code!==429&&e.code!==503)||/Günlük/.test(e.message))throw e;$("st").textContent="Gemini yoğun, "+15*(i+1)+" sn bekleniyor…";await sleep(15000*(i+1))}}
 }
 const parseList=t=>{t=t.replace(/```json|```/g,"").trim();let v;try{v=JSON.parse(t)}catch(e){const a=t.indexOf("["),z=t.lastIndexOf("]");if(a<0||z<a)throw new Error("Gemini yanıtı anlaşılamadı");v=JSON.parse(t.slice(a,z+1))}if(!Array.isArray(v))v=Object.values(v).find(Array.isArray)||[];return v};
 const read=async b64=>parseList(await gemRetry([{inline_data:{mime_type:"image/jpeg",data:b64}},{text:PROMPT}],true));
@@ -234,29 +236,44 @@ async function gbooksList(b){
  }
  return out.map(o=>o.v);
 }
+async function itunesCover(T,A){
+ try{const j=JSON.parse(await http("https://itunes.apple.com/search?media=ebook&country=tr&limit=8&term="+encodeURIComponent(T+" "+A)));
+  const d=(j.results||[]).filter(x=>x.artworkUrl100).map(x=>({x,s:score({title:x.trackName,authors:[x.artistName]},{title:T,author:A})})).sort((p,q)=>q.s-p.s)[0];
+  if(d&&d.s>=3)return d.x.artworkUrl100.replace(/\d+x\d+bb/,"300x300bb")}catch(e){}
+ return "";
+}
+async function coverFrom(list,T0,A){
+ const T=cleanT(T0)||T0;
+ for(const v of list){if(v.imageLinks){const u=(v.imageLinks.thumbnail||v.imageLinks.smallThumbnail||"").replace("http://","https://").replace("&edge=curl","");if(u)return u}}
+ const ids=[...new Set(list.flatMap(v=>(v.industryIdentifiers||[]).map(i=>i.identifier)))].slice(0,3);
+ for(const i of ids){const u="https://covers.openlibrary.org/b/isbn/"+i+"-M.jpg?default=false";if(await imgOk(u))return u}
+ try{const j=await (await fetch("https://openlibrary.org/search.json?limit=6&fields=title,author_name,cover_i&title="+encodeURIComponent(T)+(A?"&author="+encodeURIComponent(A):""))).json();
+  const d=(j.docs||[]).filter(x=>x.cover_i).map(x=>({x,s:score({title:x.title,authors:x.author_name||[]},{title:T,author:A})})).sort((p,q)=>q.s-p.s)[0];
+  if(d&&d.s>=3)return "https://covers.openlibrary.org/b/id/"+d.x.cover_i+"-M.jpg"}catch(e){}
+ return await itunesCover(T,A);
+}
 async function webInfo(b){
- if(b.front&&b.desc&&b.publisher)return;
+ if(b.front&&b.desc&&b.publisher&&b.pages)return;
  let list=[];try{list=await gbooksList(b)}catch(e){}
  for(const v of list){
-  if(!b.front&&v.imageLinks){const u=(v.imageLinks.thumbnail||v.imageLinks.smallThumbnail||"").replace("http://","https://").replace("&edge=curl","");if(u)b.front=u}
   if(!b.publisher&&v.publisher){b.publisher=v.publisher;b.guess=true}
+  if(!b.pages&&v.pageCount>10&&v.pageCount<5000){b.pages=v.pageCount;b.pagesSrc="Google Books"}
   if(!b.desc&&v.description){b.desc=v.description.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,380);b.descSrc="Google Books"}
  }
- if(!b.front){
-  const ids=[...new Set(list.flatMap(v=>(v.industryIdentifiers||[]).map(i=>i.identifier)))].slice(0,3);
-  for(const i of ids){const u="https://covers.openlibrary.org/b/isbn/"+i+"-M.jpg?default=false";if(await imgOk(u)){b.front=u;break}}
- }
- if(!b.front){
-  try{const T=b.title,A=b.author||"",C=cleanT(T)||T;
-   const j=await (await fetch("https://openlibrary.org/search.json?limit=6&fields=title,author_name,cover_i&title="+encodeURIComponent(C)+(A?"&author="+encodeURIComponent(A):""))).json();
-   const d=(j.docs||[]).filter(x=>x.cover_i).map(x=>({x,s:score({title:x.title,authors:x.author_name||[]},{title:C,author:A})})).sort((p,q)=>q.s-p.s)[0];
-   if(d&&d.s>=3)b.front="https://covers.openlibrary.org/b/id/"+d.x.cover_i+"-M.jpg"}catch(e){}
- }
+ if(!b.front){const u=await coverFrom(list,b.title,b.author||"");if(u){b.front=u;b.frontAlt=false}}
+}
+async function origCover(b){
+ try{const l=await gbooksList({title:b.orig,author:b.author||""});const u=await coverFrom(l,b.orig,b.author||"");if(u){b.front=u;b.frontAlt=true}}catch(e){}
 }
 async function aiDescs(g){
  const txt=g.map((b,i)=>(i+1)+". "+b.title+(b.author?" — "+b.author:"")).join("\n");
- const t=await gemRetry([{text:'Aşağıdaki kitapların her biri için Türkçe, en fazla 2 cümlelik, tarafsız bir içerik özeti yaz. Bir kitabı tanımıyorsan onun "d" alanını boş bırak, ayrıntı uydurma. Yalnızca JSON dizisi döndür: [{"n":1,"d":"..."}]\n\n'+txt}],true);
- for(const o of parseList(t)){const b=g[(o.n|0)-1];if(b&&o.d&&String(o.d).trim()){b.desc=String(o.d).trim().slice(0,380);b.descSrc="yapay zekâ özeti"}}
+ const q='Aşağıdaki kitaplar için her biri adına şunları ver: "d": Türkçe, en fazla 2 cümlelik, tarafsız içerik özeti (kitabı tanımıyorsan boş bırak, ayrıntı uydurma); "o": kitabın özgün adı, Latin harfleriyle, çoğunlukla İngilizce (bilmiyorsan boş bırak); "s": kitabın yaygın Türkçe baskısının yaklaşık sayfa sayısı, tam sayı (bilmiyorsan 0). Yalnızca JSON dizisi döndür: [{"n":1,"d":"...","o":"...","s":320}]\n\n'+txt;
+ let arr;
+ try{arr=parseList(await gemRetry([{text:q}],true))}catch(e){if(/anlaşılamadı|JSON|Unexpected/i.test(e.message))arr=parseList(await gemRetry([{text:q}],true));else throw e}
+ for(const o of arr){const b=g[(o.n|0)-1];if(!b)continue;
+  if(!b.desc&&o.d&&String(o.d).trim()){b.desc=String(o.d).trim().slice(0,380);b.descSrc="yapay zekâ özeti"}
+  if(o.o&&String(o.o).trim())b.orig=String(o.o).trim().slice(0,120);
+  const sp=parseInt(o.s);if(!b.pages&&sp>10&&sp<5000){b.pages=sp;b.pagesSrc="yapay zekâ tahmini"}}
 }
 async function pool(items,n,fn){let i=0;await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(i<items.length){const k=i++;try{await fn(items[k],k)}catch(e){}}}))}
 const rdr=(()=>{let t=0;return()=>{if(t)return;t=setTimeout(()=>{t=0;render()},400)}})();
@@ -268,12 +285,14 @@ async function enrichAll(list){
   let done=0,gerr="";
   await pool(list,5,async b=>{await webInfo(b);done++;$("st").textContent=`Bilgiler aranıyor ${done}/${list.length}…`;rdr();if(done%10===0)save()});
   save();render();
-  const need=list.filter(b=>!b.desc),groups=[];
+  const need=list.filter(b=>!b.desc||!b.pages||(!b.front&&!b.orig)),groups=[];
   for(let i=0;i<need.length;i+=8)groups.push(need.slice(i,i+8));
   let gd=0;
-  await pool(groups,2,async g=>{try{await aiDescs(g)}catch(e){gerr=(e&&e.message)||String(e)}gd++;$("st").textContent=`Özetler hazırlanıyor ${gd}/${groups.length}…`;rdr()});
+  await pool(groups,1,async g=>{try{await aiDescs(g)}catch(e){gerr=(e&&e.message)||String(e)}gd++;$("st").textContent=`Özetler hazırlanıyor ${gd}/${groups.length}…`;rdr();save()});
+  const alt=list.filter(b=>!b.front&&b.orig);let ad=0;
+  await pool(alt,4,async b=>{await origCover(b);ad++;$("st").textContent=`Kapaklar aranıyor ${ad}/${alt.length}…`;rdr()});
   save();render();
-  return{ok:list.filter(b=>b.desc).length,cv:list.filter(b=>b.front||b.fimg).length,total:list.length,err:gerr};
+  return{ok:list.filter(b=>b.desc).length,cv:list.filter(b=>b.front||b.fimg).length,total:list.length,err:gerr,miss:list.filter(b=>!b.front&&!b.fimg).map(b=>b.title)};
  }finally{enriching=false}
 }
 const http=async url=>{
@@ -368,7 +387,7 @@ $("fc2").onchange=async e=>{const f=e.target.files[0];e.target.value="";$("alt2"
 let editId=null,delArm=false;
 function openEdit(id,f){
  const b=books.find(x=>x.id===id);if(!b)return;editId=id;delArm=false;
- $("e-t").value=b.title;$("e-a").value=b.author||"";$("e-p").value=b.publisher||"";$("e-d").value=b.desc||"";
+ $("e-t").value=b.title;$("e-a").value=b.author||"";$("e-p").value=b.publisher||"";$("e-d").value=b.desc||"";$("e-n").value=b.pages||"";
  $("e-ok").checked=false;$("e-okl").style.display=b.guess&&b.publisher?"block":"none";$("e-del").textContent="Sil";
  $("ed").style.display="flex";setTimeout(()=>{(f==="p"?$("e-p"):$("e-t")).focus()},60);
 }
@@ -381,6 +400,7 @@ $("e-save").onclick=()=>{
  const p=$("e-p").value.trim(),d=$("e-d").value.trim();
  if(p!==(b.publisher||"")||$("e-ok").checked)b.guess=false;
  b.title=t;b.author=$("e-a").value.trim();b.publisher=p;
+ const pg=parseInt($("e-n").value)||0;if(pg!==(b.pages||0)){b.pages=pg||0;b.pagesSrc=pg?"elle girildi":""}
  if(d!==(b.desc||"")){b.desc=d;b.descSrc=d?"elle girildi":""}
  save();render();closeEdit();$("st").textContent="Kitap güncellendi.";
 };
@@ -389,11 +409,11 @@ $("e-del").onclick=()=>{
  books=books.filter(x=>x.id!==editId);save();render();closeEdit();$("st").textContent="Kitap silindi.";
 };
 $("fill").onclick=async()=>{
- const todo=books.filter(b=>!b.desc||!b.front);
+ const todo=books.filter(b=>!b.desc||!b.front||!b.pages);
  if(!todo.length)return $("st").textContent="Tüm kitapların bilgisi tam.";
  const t0=Date.now(),r=await enrichAll(todo);
  if(r.busy)return $("st").textContent="Bilgiler zaten tamamlanıyor, biraz bekle.";
- $("st").textContent=`${r.ok}/${r.total} kitabın bilgisi, ${r.cv}/${r.total} kitabın kapağı tamamlandı (${Math.round((Date.now()-t0)/1000)} sn).`+(r.ok<r.total&&r.err?" Son hata: "+r.err:"");
+ $("st").textContent=`${r.ok}/${r.total} kitabın bilgisi, ${r.cv}/${r.total} kitabın kapağı tamamlandı (${Math.round((Date.now()-t0)/1000)} sn).`+(r.ok<r.total&&r.err?" Özet hatası: "+r.err+".":"")+(r.miss&&r.miss.length?" Kapağı bulunamayan: "+r.miss.slice(0,4).join(", ")+(r.miss.length>4?" +"+(r.miss.length-4):"")+".":"");
 };
 const exportList=()=>tab==="fav"?books.filter(b=>b.fav):books;
 async function shareFile(name,b64){
@@ -406,22 +426,22 @@ function loadXlsx(){return new Promise((ok,no)=>{if(window.XLSX)return ok();cons
 $("xl").onclick=async()=>{
  if(!exportList().length)return $("st").textContent="Aktarılacak kitap yok.";
  try{await loadXlsx();
-  const rows=[["Kitap","Yazar","Yayınevi","Kısa bilgi","Bilgi kaynağı","Okur yorumları (1000Kitap)","Favori"],...exportList().map(b=>[b.title,b.author,b.publisher,b.desc||"",b.descSrc||"",b.rev?b.rev.t:"",b.fav?"★":""])];
-  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:36},{wch:24},{wch:22},{wch:80},{wch:18},{wch:80},{wch:8}];
+  const rows=[["Kitap","Yazar","Yayınevi","Sayfa (yaklaşık)","Kısa bilgi","Bilgi kaynağı","Okur yorumları (1000Kitap)","Favori"],...exportList().map(b=>[b.title,b.author,b.publisher,b.pages||"",b.desc||"",b.descSrc||"",b.rev?b.rev.t:"",b.fav?"★":""])];
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:36},{wch:24},{wch:22},{wch:10},{wch:80},{wch:18},{wch:80},{wch:8}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Kitaplık");
   await shareFile("kitappla.xlsx",XLSX.write(wb,{bookType:"xlsx",type:"base64"}));
  }catch(e){$("st").textContent="Excel hatası: "+((e&&e.message)||e)}
 };
 function pdfPages(){
  const W=1754,H=1240,M=50,list=exportList(),pages=[];let c,x,y;
- const C=[{h:"#",w:54},{h:"Kitap",w:300},{h:"Yazar",w:210},{h:"Yayınevi",w:230},{h:"Kısa bilgi",w:470},{h:"Okur yorumları",w:390}];
+ const C=[{h:"#",w:54},{h:"Kitap",w:300},{h:"Yazar",w:210},{h:"Yayınevi",w:230},{h:"Sayfa",w:80},{h:"Kısa bilgi",w:430},{h:"Okur yorumları",w:350}];
  const FS="21px sans-serif",FB="bold 21px sans-serif",LH=28,PAD=10;
  const wrap=(t,w,f)=>{x.font=f;const out=[];let line="";for(const word of String(t||"").split(/\s+/)){const tt=line?line+" "+word:word;if(x.measureText(tt).width>w&&line){out.push(line);line=word}else line=tt}if(line)out.push(line);if(out.length>14){out.length=14;out[13]=out[13].slice(0,-2)+"…"}return out};
  const head=()=>{let cx=M;x.fillStyle="#d9531e";x.fillRect(M,y,W-2*M,44);x.fillStyle="#fff";x.font=FB;C.forEach(k=>{x.fillText(k.h,cx+PAD,y+30);cx+=k.w});y+=44};
  const np=()=>{c=document.createElement("canvas");c.width=W;c.height=H;x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,W,H);y=M;pages.push(c);if(pages.length===1){x.fillStyle="#d9531e";x.font="bold 40px sans-serif";x.fillText("Kitaplığım"+(tab==="fav"?" – Favoriler":""),M,y+34);y+=60}head()};
  np();
  list.forEach((b,i)=>{
-  const cells=[String(i+1),(b.fav?"★ ":"")+b.title,b.author||"",b.publisher||"",b.desc||"",b.rev?b.rev.t.replace(/\s*\n\s*/g," "):""];
+  const cells=[String(i+1),(b.fav?"★ ":"")+b.title,b.author||"",b.publisher||"",b.pages?(b.pagesSrc==="elle girildi"?"":"≈")+b.pages:"",b.desc||"",b.rev?b.rev.t.replace(/\s*\n\s*/g," "):""];
   const lines=cells.map((t,k)=>wrap(t,C[k].w-2*PAD,k===1?FB:FS));
   const rh=Math.max(...lines.map(l=>l.length))*LH+2*PAD;
   if(y+rh>H-M)np();
